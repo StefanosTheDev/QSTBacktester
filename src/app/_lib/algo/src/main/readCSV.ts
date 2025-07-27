@@ -12,7 +12,8 @@ function parsePSTTimestamp(timestamp: string): Date {
   // "2025-01-15 09:30:00 AM" → force PST interpretation
   const [datePart, timePart, ampm] = timestamp.split(' ');
   const [year, month, day] = datePart.split('-').map(Number);
-  const [hours, minutes, seconds] = timePart.split(':').map(Number);
+  let [hours] = timePart.split(':').map(Number);
+  const [, minutes, seconds] = timePart.split(':').map(Number);
 
   // Convert to 24-hour
   if (ampm === 'PM' && hours !== 12) hours += 12;
