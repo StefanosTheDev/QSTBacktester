@@ -9,11 +9,51 @@ const BASE_DIR = path.join(process.cwd(), 'src/app/_lib/algo/src/csv_database');
 
 // Parse timestamp ensuring PST interpretation
 function parsePSTTimestamp(timestamp: string): Date {
+  // Handle edge cases
+  if (!timestamp) {
+    throw new Error('Timestamp is undefined or empty');
+  }
+
   // "2025-01-15 09:30:00 AM" → force PST interpretation
-  const [datePart, timePart, ampm] = timestamp.split(' ');
-  const [year, month, day] = datePart.split('-').map(Number);
-  let [hours] = timePart.split(':').map(Number);
-  const [, minutes, seconds] = timePart.split(':').map(Number);
+  const parts = timestamp.split(' ');
+  if (parts.length !== 3) {
+    throw new Error(
+      `Invalid timestamp format: "${timestamp}". Expected "YYYY-MM-DD HH:MM:SS AM/PM"`
+    );
+  }
+
+  const [datePart, timePart, ampm] = parts;
+
+  if (!datePart || !timePart || !ampm) {
+    throw new Error(`Invalid timestamp components in: "${timestamp}"`);
+  }
+
+  const dateParts = datePart.split('-');
+  if (dateParts.length !== 3) {
+    throw new Error(`Invalid date format in timestamp: "${timestamp}"`);
+  }
+
+  const [year, month, day] = dateParts.map(Number);
+
+  const timeParts = timePart.split(':');
+  if (timeParts.length !== 3) {
+    throw new Error(`Invalid time format in timestamp: "${timestamp}"`);
+  }
+
+  let [hours] = timeParts.map(Number);
+  const [, minutes, seconds] = timeParts.map(Number);
+
+  // Validate numeric values
+  if (
+    isNaN(year) ||
+    isNaN(month) ||
+    isNaN(day) ||
+    isNaN(hours) ||
+    isNaN(minutes) ||
+    isNaN(seconds)
+  ) {
+    throw new Error(`Invalid numeric values in timestamp: "${timestamp}"`);
+  }
 
   // Convert to 24-hour
   if (ampm === 'PM' && hours !== 12) hours += 12;
@@ -51,8 +91,18 @@ export async function* streamCsvBars(
   }
 ): AsyncGenerator<CsvBar> {
   // Parse the start and end dates using PST interpretation
-  const startDate = parsePSTTimestamp(start);
-  const endDate = parsePSTTimestamp(end);
+  let startDate: Date;
+  let endDate: Date;
+
+  try {
+    startDate = parsePSTTimestamp(start);
+    endDate = parsePSTTimestamp(end);
+  } catch (error) {
+    console.error('Error parsing start/end dates:', error);
+    console.error('Start input:', start);
+    console.error('End input:', end);
+    throw new Error(`Failed to parse date parameters: ${error}`);
+  }
 
   // Get time windows in 24-hour format
   const startTime = getPSTTimeString(startDate);
@@ -95,7 +145,13 @@ export async function* streamCsvBars(
       if (!timestamp) continue;
 
       // Parse the bar timestamp using PST interpretation
-      const barDate = parsePSTTimestamp(timestamp);
+      let barDate: Date;
+      try {
+        barDate = parsePSTTimestamp(timestamp);
+      } catch (error) {
+        console.error(`Error parsing bar timestamp: "${timestamp}"`, error);
+        continue; // Skip this bar if we can't parse its timestamp
+      }
 
       // Check if this bar falls within our overall date range
       if (barDate < startDate || barDate > endDate) {
