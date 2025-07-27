@@ -219,7 +219,10 @@ export default function StatsCardView({
   };
 
   // Render month card
-  const renderMonthCard = (monthKey: string, data: any) => (
+  const renderMonthCard = (
+    monthKey: string,
+    data: (typeof monthlyData)[string]
+  ) => (
     <div
       key={monthKey}
       className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-200 hover:border-blue-300"
@@ -283,7 +286,10 @@ export default function StatsCardView({
   );
 
   // Render week card
-  const renderWeekCard = (weekKey: string, data: any) => (
+  const renderWeekCard = (
+    weekKey: string,
+    data: ReturnType<typeof getWeeklyData>[string]
+  ) => (
     <div
       key={weekKey}
       className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer border border-gray-200 hover:border-blue-300"

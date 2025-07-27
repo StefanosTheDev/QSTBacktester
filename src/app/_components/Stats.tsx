@@ -1,5 +1,6 @@
 // components/Stats.tsx - Main container component
 import React, { useState } from 'react';
+import { FormProp } from '../types/types';
 import StatsOverview from './stats/StatsOverView';
 import StatsCardView from './stats/StatsCardView';
 import StatsTradeDetails from './stats/StatsTradeDetails';
@@ -54,7 +55,7 @@ interface StatsProps {
       }
     >;
   };
-  settings?: any; // Trading settings from the form
+  settings?: FormProp; // Trading settings from the form
 }
 
 export default function Stats({ results, settings }: StatsProps) {
@@ -156,7 +157,7 @@ export default function Stats({ results, settings }: StatsProps) {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <StatsOverview statistics={statistics} count={count} logs={logs} />
+        <StatsOverview statistics={statistics} count={count} />
       )}
 
       {activeTab === 'trades' && <StatsTradeDetails trades={trades} />}

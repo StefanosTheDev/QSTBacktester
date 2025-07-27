@@ -394,7 +394,12 @@ export async function run(
     daysHitStop: dailyLimitStats.daysHitStop,
     daysHitTarget: dailyLimitStats.daysHitTarget,
     totalTradingDays: dailyLimitStats.totalDays,
-    avgWinLoss: (baseStats as any).avgWinLoss, // Type assertion to handle the property
+    avgWinLoss: baseStats.avgWinLoss as {
+      avgWin: number;
+      avgLoss: number;
+      avgWinPoints: number;
+      avgLossPoints: number;
+    },
   };
 
   // Recalculate average profit based on capped total

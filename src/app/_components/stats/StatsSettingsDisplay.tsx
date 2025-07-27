@@ -10,7 +10,7 @@ interface SettingsDisplayProps {
     barType: string;
     barSize: number;
     candleType: string;
-    cvdLookBackBars: number;
+    cvdLookBackBars?: number;
     emaMovingAverage?: number;
     adxThreshold?: number;
     adxPeriod?: number;
@@ -109,7 +109,7 @@ export default function StatsSettingsDisplay({
             <div>
               <span className="text-gray-600">CVD Lookback:</span>{' '}
               <span className="font-medium">
-                {settings.cvdLookBackBars} bars
+                {settings.cvdLookBackBars || 5} bars
               </span>
             </div>
           </div>

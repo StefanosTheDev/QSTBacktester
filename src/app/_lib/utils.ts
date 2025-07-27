@@ -21,7 +21,7 @@ export function buildParams(input: FormProp): FormParams {
 
   // 2) Filter out zero‐valued numeric fields as before
   const filtered = Object.fromEntries(
-    Object.entries(rest).filter(([_, v]) => v !== 0)
+    Object.entries(rest).filter(([, v]) => v !== 0)
   ) as Omit<FormProp, 'startDate' | 'startTime' | 'endDate' | 'endTime'>;
 
   return {

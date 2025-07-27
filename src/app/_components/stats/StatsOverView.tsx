@@ -17,13 +17,11 @@ interface StatsOverviewProps {
     totalTradingDays?: number;
   };
   count: number;
-  logs: string[];
 }
 
 export default function StatsOverview({
   statistics,
   count,
-  logs,
 }: StatsOverviewProps) {
   // Calculate green vs red days percentage
   const profitableDays = Object.values(statistics.dailyPnL).filter(

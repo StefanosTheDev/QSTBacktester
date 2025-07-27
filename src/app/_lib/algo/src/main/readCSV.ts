@@ -136,7 +136,7 @@ export async function* streamCsvBars(
         };
 
         // Build base log data
-        const logData: any = {
+        const logData: Record<string, unknown> = {
           open: bar.open,
           high: bar.high,
           low: bar.low,

@@ -3,6 +3,24 @@ import React, { useState, FormEvent } from 'react';
 import { FormProp } from '../types/types';
 import Stats from './Stats';
 
+// Define TradeRecord interface
+interface TradeRecord {
+  entryDate: string;
+  entryTime: string;
+  entryPrice: number;
+  exitDate: string;
+  exitTime: string;
+  exitPrice: number;
+  type: 'LONG' | 'SHORT';
+  contracts: number;
+  stopLoss: number;
+  takeProfit: number;
+  exitReason: string;
+  profitLoss: number;
+  commission: number;
+  netProfitLoss: number;
+}
+
 // Define the result type to match your BacktestResult
 interface BacktestResults {
   count: number;
@@ -21,7 +39,7 @@ interface BacktestResults {
     daysHitTarget?: number;
     totalTradingDays?: number;
   };
-  trades?: any[]; // TradeRecord type
+  trades?: TradeRecord[];
   intradayStats?: Record<
     string,
     {
@@ -120,9 +138,9 @@ export default function AlgoForm() {
     }
   };
 
-  // const toggleView = () => {
-  //   setShowForm(!showForm);
-  // };
+  const toggleView = () => {
+    setShowForm(!showForm);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10">
@@ -452,7 +470,10 @@ export default function AlgoForm() {
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">
                 Backtest Results
               </h2>
-              <Stats results={results} settings={lastRunSettings} />
+              <Stats
+                results={results}
+                settings={lastRunSettings || undefined}
+              />
             </div>
           </div>
         )}
