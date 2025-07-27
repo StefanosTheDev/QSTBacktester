@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "csv-parse": "^6.1.0",
     "date-fns": "^4.1.0",
     "date-holidays": "^3.24.4",
     "lucide-react": "^0.517.0",
