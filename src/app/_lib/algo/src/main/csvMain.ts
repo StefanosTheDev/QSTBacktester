@@ -70,6 +70,18 @@ export async function run(
   formData: ApiParams
 ): Promise<BacktestResult> {
   const logs: string[] = [];
+
+  // DEBUG: Environment info
+  logs.push(`🔍 DEBUG - Environment: ${process.env.NODE_ENV || 'development'}`);
+  logs.push(`🔍 DEBUG - Node Version: ${process.version}`);
+  logs.push(
+    `🔍 DEBUG - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
+  );
+  logs.push(`🔍 DEBUG - Current Time: ${new Date().toISOString()}`);
+  logs.push(`🔍 DEBUG - Start Param: ${formData.start}`);
+  logs.push(`🔍 DEBUG - End Param: ${formData.end}`);
+  logs.push(`🔍 DEBUG - CSV Files: ${csvFiles.join(', ')}`);
+
   logs.push(`🚀 Starting backtest from ${formData.start} → ${formData.end}`);
 
   // Initialize trading components
@@ -121,6 +133,8 @@ export async function run(
   let count = 0;
   let isFirstBar = true;
   let currentDay = '';
+  let firstBarLogged = false;
+  let lastBarTimestamp = '';
 
   for await (const bar of streamCsvBars(
     csvFiles,
@@ -129,6 +143,26 @@ export async function run(
     filterParams
   )) {
     count++;
+
+    // DEBUG: Log first 3 bars
+    if (count <= 3) {
+      logs.push(
+        `🔍 DEBUG - Bar ${count}: ${JSON.stringify({
+          timestamp: bar.timestamp,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          cvd_close: bar.cvd_close,
+        })}`
+      );
+    }
+
+    if (!firstBarLogged) {
+      logs.push(`🔍 DEBUG - First Bar Timestamp: ${bar.timestamp}`);
+      firstBarLogged = true;
+    }
+    lastBarTimestamp = bar.timestamp;
 
     // Check if it's a new day
     const barDay = new Date(bar.timestamp).toLocaleDateString('en-US');
@@ -381,6 +415,10 @@ export async function run(
       trades: currentDayTrades,
     };
   }
+
+  // DEBUG: Final bar info
+  logs.push(`🔍 DEBUG - Last Bar Timestamp: ${lastBarTimestamp}`);
+  logs.push(`🔍 DEBUG - Total Bars Processed: ${count}`);
 
   // Get final statistics
   const baseStats = positionManager.getStatistics().getStatistics();

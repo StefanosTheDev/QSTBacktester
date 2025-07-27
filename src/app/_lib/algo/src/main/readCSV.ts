@@ -1,4 +1,4 @@
-// Fixed version of streamCsvBars that handles daily time windows with AM/PM support
+// src/strategy/readCSV.ts - DEBUG VERSION
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
@@ -19,9 +19,26 @@ export async function* streamCsvBars(
     cvdLookBackBars?: number;
   }
 ): AsyncGenerator<CsvBar> {
+  // DEBUG: Log environment info
+  console.log('🔍 DEBUG streamCsvBars - Environment:', {
+    NODE_ENV: process.env.NODE_ENV,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    nodeVersion: process.version,
+    platform: process.platform,
+  });
+
   // Parse the start and end to extract date range and time window
   const startDate = new Date(start);
   const endDate = new Date(end);
+
+  console.log('🔍 DEBUG streamCsvBars - Date parsing:', {
+    startInput: start,
+    endInput: end,
+    startDateParsed: startDate.toISOString(),
+    endDateParsed: endDate.toISOString(),
+    startDateLocal: startDate.toString(),
+    endDateLocal: endDate.toString(),
+  });
 
   // Convert AM/PM times to 24-hour format for proper comparison
   const startDateTime = new Date(start);
@@ -49,6 +66,7 @@ export async function* streamCsvBars(
   console.log(`✅ All ${csvFiles.length} CSV files validated.`);
 
   let totalBarsYielded = 0;
+  let debugBarCount = 0;
 
   // 2) Stream through each CSV file
   for (const f of csvFiles) {
@@ -135,6 +153,22 @@ export async function* streamCsvBars(
           ema_200: parseFloat(record.ema_200),
         };
 
+        // DEBUG: Log first 5 bars completely
+        debugBarCount++;
+        if (debugBarCount <= 5) {
+          console.log(`🔍 DEBUG - Complete Bar ${debugBarCount}:`, {
+            timestamp: bar.timestamp,
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+            volume: bar.volume,
+            cvd_close: bar.cvd_close,
+            adx: bar.adx,
+            ema_21: bar.ema_21,
+          });
+        }
+
         // Build base log data
         const logData: Record<string, unknown> = {
           open: bar.open,
@@ -197,4 +231,11 @@ export async function* streamCsvBars(
   }
 
   console.log(`🎉 Total bars yielded across all files: ${totalBarsYielded}`);
+  console.log('🔍 DEBUG - Final summary:', {
+    totalBarsYielded,
+    startTime,
+    endTime,
+    tradingDates: tradingDates.length,
+    csvFilesProcessed: csvFiles.length,
+  });
 }
