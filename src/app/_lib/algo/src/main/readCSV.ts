@@ -1,4 +1,4 @@
-// src/strategy/readCSV.ts - DEBUG VERSION
+// src/strategy/readCSV.ts - FIXED VERSION WITH PST HANDLING
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
@@ -6,6 +6,36 @@ import { CsvBar } from './types';
 import { getTradingDates } from '../utils'; // Import your trading dates function
 
 const BASE_DIR = path.join(process.cwd(), 'src/app/_lib/algo/src/csv_database');
+
+// Parse timestamp ensuring PST interpretation
+function parsePSTTimestamp(timestamp: string): Date {
+  // "2025-01-15 09:30:00 AM" → force PST interpretation
+  const [datePart, timePart, ampm] = timestamp.split(' ');
+  const [year, month, day] = datePart.split('-').map(Number);
+  let [hours, minutes, seconds] = timePart.split(':').map(Number);
+
+  // Convert to 24-hour
+  if (ampm === 'PM' && hours !== 12) hours += 12;
+  if (ampm === 'AM' && hours === 12) hours = 0;
+
+  // Create date assuming PST (UTC-8), but during DST it's PDT (UTC-7)
+  // For consistency, we'll use UTC-8 year-round since your CSVs are labeled PST
+  const utcDate = Date.UTC(year, month - 1, day, hours + 8, minutes, seconds);
+  return new Date(utcDate);
+}
+
+// Get time string in 24-hour format from PST date
+function getPSTTimeString(date: Date): string {
+  // Get PST hours (we added 8 when creating, so subtract 8 to get back)
+  const pstHours = date.getUTCHours() - 8;
+  const adjustedHours = pstHours < 0 ? pstHours + 24 : pstHours;
+  const minutes = date.getUTCMinutes();
+  const seconds = date.getUTCSeconds();
+
+  return `${adjustedHours.toString().padStart(2, '0')}:${minutes
+    .toString()
+    .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
 
 export async function* streamCsvBars(
   csvFiles: string[],
@@ -19,39 +49,20 @@ export async function* streamCsvBars(
     cvdLookBackBars?: number;
   }
 ): AsyncGenerator<CsvBar> {
-  // DEBUG: Log environment info
-  console.log('🔍 DEBUG streamCsvBars - Environment:', {
-    NODE_ENV: process.env.NODE_ENV,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    nodeVersion: process.version,
-    platform: process.platform,
-  });
+  // Parse the start and end dates using PST interpretation
+  const startDate = parsePSTTimestamp(start);
+  const endDate = parsePSTTimestamp(end);
 
-  // Parse the start and end to extract date range and time window
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-
-  console.log('🔍 DEBUG streamCsvBars - Date parsing:', {
-    startInput: start,
-    endInput: end,
-    startDateParsed: startDate.toISOString(),
-    endDateParsed: endDate.toISOString(),
-    startDateLocal: startDate.toString(),
-    endDateLocal: endDate.toString(),
-  });
-
-  // Convert AM/PM times to 24-hour format for proper comparison
-  const startDateTime = new Date(start);
-  const endDateTime = new Date(end);
-  const startTime = startDateTime.toTimeString().split(' ')[0]; // "18:00:00"
-  const endTime = endDateTime.toTimeString().split(' ')[0]; // "18:10:00"
+  // Get time windows in 24-hour format
+  const startTime = getPSTTimeString(startDate);
+  const endTime = getPSTTimeString(endDate);
 
   // Get only valid trading dates (excludes weekends and holidays)
   const tradingDates = getTradingDates(start, end);
   const tradingDateSet = new Set(tradingDates);
 
   console.log(
-    `🎯 Target time window: ${startTime} to ${endTime} (24-hour format)`
+    `🎯 Target time window: ${startTime} to ${endTime} (24-hour format PST)`
   );
   console.log(`📅 Valid trading dates: ${tradingDates.join(', ')}`);
   console.log(`🔍 DEBUG - Received params:`, params);
@@ -66,7 +77,6 @@ export async function* streamCsvBars(
   console.log(`✅ All ${csvFiles.length} CSV files validated.`);
 
   let totalBarsYielded = 0;
-  let debugBarCount = 0;
 
   // 2) Stream through each CSV file
   for (const f of csvFiles) {
@@ -83,7 +93,8 @@ export async function* streamCsvBars(
 
       if (!timestamp) continue;
 
-      const barDate = new Date(timestamp);
+      // Parse the bar timestamp using PST interpretation
+      const barDate = parsePSTTimestamp(timestamp);
 
       // Check if this bar falls within our overall date range
       if (barDate < startDate || barDate > endDate) {
@@ -97,17 +108,13 @@ export async function* streamCsvBars(
         continue;
       }
 
-      // Convert CSV timestamp AM/PM to 24-hour format for comparison
-      const barDateTime = new Date(timestamp);
-      const barTime = barDateTime.toTimeString().split(' ')[0]; // "15:00:00"
+      // Get bar time in 24-hour format for comparison
+      const barTime = getPSTTimeString(barDate);
 
       // Debug first few comparisons
       if (barsFromThisFile < 3) {
         console.log(`🔍 DEBUG - Bar timestamp: ${timestamp}`);
-        console.log(`🔍 DEBUG - Bar time (24h): ${barTime}`);
-        console.log(
-          `🔍 DEBUG - Start time: ${startTime}, End time: ${endTime}`
-        );
+        console.log(`🔍 DEBUG - Bar time (24h PST): ${barTime}`);
         console.log(
           `🔍 DEBUG - Time comparison: ${barTime} >= ${startTime} && ${barTime} <= ${endTime} = ${
             barTime >= startTime && barTime <= endTime
@@ -152,22 +159,6 @@ export async function* streamCsvBars(
           ema_100: parseFloat(record.ema_100),
           ema_200: parseFloat(record.ema_200),
         };
-
-        // DEBUG: Log first 5 bars completely
-        debugBarCount++;
-        if (debugBarCount <= 5) {
-          console.log(`🔍 DEBUG - Complete Bar ${debugBarCount}:`, {
-            timestamp: bar.timestamp,
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
-            volume: bar.volume,
-            cvd_close: bar.cvd_close,
-            adx: bar.adx,
-            ema_21: bar.ema_21,
-          });
-        }
 
         // Build base log data
         const logData: Record<string, unknown> = {
@@ -231,11 +222,4 @@ export async function* streamCsvBars(
   }
 
   console.log(`🎉 Total bars yielded across all files: ${totalBarsYielded}`);
-  console.log('🔍 DEBUG - Final summary:', {
-    totalBarsYielded,
-    startTime,
-    endTime,
-    tradingDates: tradingDates.length,
-    csvFilesProcessed: csvFiles.length,
-  });
 }
