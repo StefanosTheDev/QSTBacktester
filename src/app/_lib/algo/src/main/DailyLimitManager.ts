@@ -6,7 +6,7 @@ export interface DailyStats {
   trades: number;
   hitDailyStop: boolean;
   hitDailyTarget: boolean;
-  tradingEnabled: boolean; // NEW: Track if trading is allowed
+  tradingEnabled: boolean; // Track if trading is allowed
 }
 
 export class DailyLimitManager {
@@ -21,9 +21,28 @@ export class DailyLimitManager {
     this.maxDailyProfit = maxDailyProfit || Infinity;
   }
 
-  // NEW METHOD: Check if trading is allowed for the current timestamp
+  // Consistent date key function that works with the timestamp format from CSV
+  private getDateKey(timestamp: string): string {
+    // The timestamp is like "2025-01-15 09:30:00 AM"
+    // Extract just the date part and convert to MM/DD/YYYY format
+    const datePart = timestamp.split(' ')[0]; // Gets "2025-01-15"
+
+    if (datePart && datePart.includes('-')) {
+      const [year, month, day] = datePart.split('-');
+      return `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
+    }
+
+    // Fallback: if timestamp is already in MM/DD/YYYY format or other format
+    const date = new Date(timestamp);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  }
+
+  // Check if trading is allowed for the current timestamp
   canTrade(timestamp: string): boolean {
-    const date = new Date(timestamp).toLocaleDateString('en-US');
+    const date = this.getDateKey(timestamp);
 
     // Initialize new day if needed
     if (date !== this.currentDate) {
@@ -74,7 +93,7 @@ export class DailyLimitManager {
     reason?: string;
     cappedProfit?: number;
   } {
-    const date = new Date(timestamp).toLocaleDateString('en-US');
+    const date = this.getDateKey(timestamp);
     let todayStats = this.dailyStats.get(date);
 
     if (!todayStats) {
@@ -149,9 +168,14 @@ export class DailyLimitManager {
   }
 
   getDailyStats(): DailyStats[] {
-    return Array.from(this.dailyStats.values()).sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    return Array.from(this.dailyStats.values()).sort((a, b) => {
+      // Parse MM/DD/YYYY format for proper sorting
+      const [aMonth, aDay, aYear] = a.date.split('/').map((n) => parseInt(n));
+      const [bMonth, bDay, bYear] = b.date.split('/').map((n) => parseInt(n));
+      const aDate = new Date(aYear, aMonth - 1, aDay);
+      const bDate = new Date(bYear, bMonth - 1, bDay);
+      return aDate.getTime() - bDate.getTime();
+    });
   }
 
   getDailyCappedPnL(): Record<string, number> {
@@ -165,7 +189,7 @@ export class DailyLimitManager {
     return dailyPnL;
   }
 
-  // NEW: Get actual (uncapped) daily P&L
+  // Get actual (uncapped) daily P&L
   getDailyActualPnL(): Record<string, number> {
     const dailyPnL: Record<string, number> = {};
 
@@ -178,13 +202,13 @@ export class DailyLimitManager {
   }
 
   getCurrentDayPnL(timestamp: string): number {
-    const date = new Date(timestamp).toLocaleDateString('en-US');
+    const date = this.getDateKey(timestamp);
     const todayStats = this.dailyStats.get(date);
     return todayStats ? todayStats.actualPnl : 0; // Return actual P&L, not capped
   }
 
   getCurrentDayCappedPnL(timestamp: string): number {
-    const date = new Date(timestamp).toLocaleDateString('en-US');
+    const date = this.getDateKey(timestamp);
     const todayStats = this.dailyStats.get(date);
     return todayStats ? todayStats.pnl : 0; // Return capped P&L
   }

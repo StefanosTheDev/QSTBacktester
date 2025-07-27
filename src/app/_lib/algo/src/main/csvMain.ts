@@ -1,4 +1,4 @@
-// src/strategy/csvMain.ts - Fixed with Proper Daily Limit Enforcement
+// src/strategy/csvMain.ts - Fixed with Proper Daily Limit Enforcement and Timezone Handling
 import { ApiParams, CsvBar } from './types';
 import { PositionManager } from './PositionManager';
 import { SignalGenerator } from './SignalGenerator';
@@ -29,7 +29,7 @@ export interface BacktestResult {
     daysHitStop?: number;
     daysHitTarget?: number;
     totalTradingDays?: number;
-    // NEW: Add actual (uncapped) metrics
+    // Add actual (uncapped) metrics
     actualTotalProfit?: number;
     actualDailyPnL?: Record<string, number>;
   };
@@ -68,19 +68,69 @@ interface PendingSignal {
   entryPrice?: number;
 }
 
+// Utility function for consistent date formatting (matches DailyLimitManager)
+function getDateKey(timestamp: string): string {
+  const datePart = timestamp.split(' ')[0];
+
+  if (datePart && datePart.includes('-')) {
+    const [year, month, day] = datePart.split('-');
+    return `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
+  }
+
+  const date = new Date(timestamp);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${month}/${day}/${year}`;
+}
+
 export async function run(
   csvFiles: string[],
   formData: ApiParams
 ): Promise<BacktestResult> {
   const logs: string[] = [];
 
+  // TIMEZONE DEBUGGING
+  logs.push(`\n🌍 TIMEZONE DIAGNOSTICS:`);
+  logs.push(
+    `   - Server Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
+  );
+  logs.push(`   - Server Time Now: ${new Date().toString()}`);
+  logs.push(
+    `   - Server UTC Offset: ${new Date().getTimezoneOffset()} minutes`
+  );
+
+  // Test date parsing
+  const testDate = '1/2/2025';
+  const testTime = '09:30';
+  const testDateTime = `${testDate} ${testTime}:00 AM`;
+
+  const parsed1 = new Date(testDate);
+  const parsed2 = new Date(testDateTime);
+  const parsed3 = new Date(`2025-01-02T09:30:00`);
+
+  logs.push(`\n   Date Parsing Tests:`);
+  logs.push(`   - Parse "${testDate}": ${parsed1.toString()}`);
+  logs.push(`   - Parse "${testDateTime}": ${parsed2.toString()}`);
+  logs.push(`   - Parse ISO "2025-01-02T09:30:00": ${parsed3.toString()}`);
+
+  // Test specific timestamp parsing
+  const testTimestamp = '2025-01-15 09:30:00 AM';
+  logs.push(`\n🔍 PARSING TEST for: "${testTimestamp}"`);
+
+  const parsedTest = new Date(testTimestamp);
+  logs.push(`   Direct parse: ${parsedTest.toString()}`);
+  logs.push(`   ISO String: ${parsedTest.toISOString()}`);
+  logs.push(
+    `   Hours: ${parsedTest.getHours()}, UTC Hours: ${parsedTest.getUTCHours()}`
+  );
+  logs.push(`   DateKey result: ${getDateKey(testTimestamp)}`);
+
+  logs.push(`\n`);
+
   // DEBUG: Environment info
   logs.push(`🔍 DEBUG - Environment: ${process.env.NODE_ENV || 'development'}`);
   logs.push(`🔍 DEBUG - Node Version: ${process.version}`);
-  logs.push(
-    `🔍 DEBUG - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
-  );
-  logs.push(`🔍 DEBUG - Current Time: ${new Date().toISOString()}`);
   logs.push(`🔍 DEBUG - Start Param: ${formData.start}`);
   logs.push(`🔍 DEBUG - End Param: ${formData.end}`);
   logs.push(`🔍 DEBUG - CSV Files: ${csvFiles.join(', ')}`);
@@ -176,12 +226,13 @@ export async function run(
 
     if (!firstBarLogged) {
       logs.push(`🔍 DEBUG - First Bar Timestamp: ${bar.timestamp}`);
+      logs.push(`🔍 DEBUG - First Bar DateKey: ${getDateKey(bar.timestamp)}`);
       firstBarLogged = true;
     }
     lastBarTimestamp = bar.timestamp;
 
-    // Check if it's a new day
-    const barDay = new Date(bar.timestamp).toLocaleDateString('en-US');
+    // Check if it's a new day using consistent date formatting
+    const barDay = getDateKey(bar.timestamp);
     if (barDay !== currentDay) {
       // Save previous day's stats
       if (currentDay !== '') {
@@ -273,8 +324,8 @@ export async function run(
           'daily-limit-reached'
         );
         if (exitResult.exited) {
+          const exitDateStr = getDateKey(bar.timestamp);
           const exitDateTime = new Date(bar.timestamp);
-          const exitDateStr = exitDateTime.toLocaleDateString('en-US');
           const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
 
           logs.push(
@@ -285,11 +336,8 @@ export async function run(
             )}`
           );
 
-          // // Record the trade
-          // const limitResult = dailyLimitManager.recordTrade(
-          //   bar.timestamp,
-          //   exitResult.profit || 0
-          // );
+          // Record the trade
+          dailyLimitManager.recordTrade(bar.timestamp, exitResult.profit || 0);
 
           // Update intraday tracking
           currentDayPnL = dailyLimitManager.getCurrentDayPnL(bar.timestamp);
@@ -315,8 +363,8 @@ export async function run(
     if (positionManager.hasPosition() && barHour === 15 && barMinute >= 55) {
       const exitResult = positionManager.forceExit(bar, 'end-of-day');
       if (exitResult.exited) {
+        const exitDateStr = getDateKey(bar.timestamp);
         const exitDateTime = new Date(bar.timestamp);
-        const exitDateStr = exitDateTime.toLocaleDateString('en-US');
         const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
 
         logs.push(
@@ -328,20 +376,13 @@ export async function run(
         );
 
         // Record the trade with daily limit manager
-        const limitResult = dailyLimitManager.recordTrade(
-          bar.timestamp,
-          exitResult.profit || 0
-        );
+        dailyLimitManager.recordTrade(bar.timestamp, exitResult.profit || 0);
 
         // Update intraday tracking
         currentDayPnL = dailyLimitManager.getCurrentDayPnL(bar.timestamp);
         currentDayMaxHigh = Math.max(currentDayMaxHigh, currentDayPnL);
         currentDayMaxLow = Math.min(currentDayMaxLow, currentDayPnL);
         currentDayTrades++;
-
-        if (!limitResult.allowed) {
-          logs.push(`🛑 ${limitResult.reason}`);
-        }
 
         if (exitResult.tradeRecord) {
           trades.push(exitResult.tradeRecord);
@@ -356,8 +397,8 @@ export async function run(
     if (positionManager.hasPosition()) {
       const exitResult = positionManager.checkExit(bar);
       if (exitResult.exited) {
+        const exitDateStr = getDateKey(bar.timestamp);
         const exitDateTime = new Date(bar.timestamp);
-        const exitDateStr = exitDateTime.toLocaleDateString('en-US');
         const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
 
         // Record the trade with daily limit manager
@@ -425,8 +466,8 @@ export async function run(
           entryPrice,
           bar
         );
+        const entryDateStr = getDateKey(bar.timestamp);
         const entryDateTime = new Date(bar.timestamp);
-        const entryDateStr = entryDateTime.toLocaleDateString('en-US');
         const entryTimeStr = entryDateTime.toLocaleTimeString('en-US');
 
         logs.push(
@@ -509,8 +550,8 @@ export async function run(
           type: signal,
           signalBar: bar,
         };
+        const signalDateStr = getDateKey(bar.timestamp);
         const signalDateTime = new Date(bar.timestamp);
-        const signalDateStr = signalDateTime.toLocaleDateString('en-US');
         const signalTimeStr = signalDateTime.toLocaleTimeString('en-US');
 
         logs.push(
@@ -535,6 +576,7 @@ export async function run(
 
   // DEBUG: Final bar info
   logs.push(`🔍 DEBUG - Last Bar Timestamp: ${lastBarTimestamp}`);
+  logs.push(`🔍 DEBUG - Last Bar DateKey: ${getDateKey(lastBarTimestamp)}`);
   logs.push(`🔍 DEBUG - Total Bars Processed: ${count}`);
 
   // Get final statistics
@@ -736,6 +778,23 @@ export async function run(
       `   ❌ Found ${limitViolations} limit violations and ${tradingAfterLimit} days with trading after limits`
     );
   }
+
+  // Add timezone diagnostic for trades
+  logs.push(`\n🕐 TIMEZONE DIAGNOSTIC:`);
+
+  // Check a few trades for timezone issues
+  trades.slice(0, Math.min(5, trades.length)).forEach((trade, idx) => {
+    logs.push(`\nTrade ${idx + 1}:`);
+    logs.push(`  Entry: ${trade.entryDate} ${trade.entryTime}`);
+    logs.push(`  Exit:  ${trade.exitDate} ${trade.exitTime}`);
+
+    // Check if dates are different
+    if (trade.entryDate !== trade.exitDate) {
+      logs.push(
+        `  ⚠️ DATES DIFFER - Check if this is a timezone issue or overnight hold`
+      );
+    }
+  });
 
   return {
     count,
