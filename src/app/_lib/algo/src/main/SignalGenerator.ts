@@ -25,9 +25,9 @@ export class SignalGenerator {
       priceWindow,
       volumeWindow,
       bar,
-      prevBar,
+      prevBar, // eslint-disable-line @typescript-eslint/no-unused-vars
       emaValue,
-      prevEmaValue,
+      prevEmaValue, // eslint-disable-line @typescript-eslint/no-unused-vars
       adxValue,
       adxThreshold,
     } = filters;
