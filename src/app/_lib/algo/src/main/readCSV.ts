@@ -65,17 +65,35 @@ function parsePSTTimestamp(timestamp: string): Date {
   return new Date(utcDate);
 }
 
-// Get time string in 24-hour format from PST date
-function getPSTTimeString(date: Date): string {
-  // Get PST hours (we added 8 when creating, so subtract 8 to get back)
-  const pstHours = date.getUTCHours() - 8;
-  const adjustedHours = pstHours < 0 ? pstHours + 24 : pstHours;
-  const minutes = date.getUTCMinutes();
-  const seconds = date.getUTCSeconds();
+// Extract time in 24-hour format directly from timestamp string
+// This avoids all timezone conversion issues
+function extractTimeFromTimestamp(timestamp: string): string {
+  // "2025-01-15 9:30:00 AM" → "09:30:00"
+  const parts = timestamp.split(' ');
+  if (parts.length !== 3) return '00:00:00';
 
-  return `${adjustedHours.toString().padStart(2, '0')}:${minutes
-    .toString()
-    .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  const timePart = parts[1]; // "9:30:00"
+  const ampm = parts[2]; // "AM" or "PM"
+
+  const timeParts = timePart.split(':');
+  if (timeParts.length !== 3) return '00:00:00';
+
+  let hours = parseInt(timeParts[0]);
+  const minutes = timeParts[1];
+  const seconds = timeParts[2];
+
+  // Convert to 24-hour format
+  if (ampm === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (ampm === 'AM' && hours === 12) {
+    hours = 0;
+  }
+
+  // Return in 24-hour format with zero padding
+  return `${hours.toString().padStart(2, '0')}:${minutes.padStart(
+    2,
+    '0'
+  )}:${seconds.padStart(2, '0')}`;
 }
 
 export async function* streamCsvBars(
@@ -104,9 +122,9 @@ export async function* streamCsvBars(
     throw new Error(`Failed to parse date parameters: ${error}`);
   }
 
-  // Get time windows in 24-hour format
-  const startTime = getPSTTimeString(startDate);
-  const endTime = getPSTTimeString(endDate);
+  // Extract times directly from the input strings (avoiding timezone issues)
+  const startTime = extractTimeFromTimestamp(start);
+  const endTime = extractTimeFromTimestamp(end);
 
   // Get only valid trading dates (excludes weekends and holidays)
   const tradingDates = getTradingDates(start, end);
@@ -117,6 +135,8 @@ export async function* streamCsvBars(
   );
   console.log(`📅 Valid trading dates: ${tradingDates.join(', ')}`);
   console.log(`🔍 DEBUG - Received params:`, params);
+  console.log(`🔍 DEBUG - Start: "${start}" → Time: ${startTime}`);
+  console.log(`🔍 DEBUG - End: "${end}" → Time: ${endTime}`);
 
   // 1) Validate files exist up-front
   for (const f of csvFiles) {
@@ -128,6 +148,7 @@ export async function* streamCsvBars(
   console.log(`✅ All ${csvFiles.length} CSV files validated.`);
 
   let totalBarsYielded = 0;
+  let debugCount = 0;
 
   // 2) Stream through each CSV file
   for (const f of csvFiles) {
@@ -140,7 +161,7 @@ export async function* streamCsvBars(
     let barsFromThisFile = 0;
 
     for await (const record of input as AsyncIterable<Record<string, string>>) {
-      const timestamp = record.timestamp; // e.g., "2025-07-20 03:00:00 PM"
+      const timestamp = record.timestamp; // e.g., "2025-07-20 3:00:00 PM"
 
       if (!timestamp) continue;
 
@@ -166,17 +187,18 @@ export async function* streamCsvBars(
       }
 
       // Get bar time in 24-hour format for comparison
-      const barTime = getPSTTimeString(barDate);
+      const barTime = extractTimeFromTimestamp(timestamp);
 
       // Debug first few comparisons
-      if (barsFromThisFile < 3) {
+      if (debugCount < 3 && barsFromThisFile === 0) {
         console.log(`🔍 DEBUG - Bar timestamp: ${timestamp}`);
-        console.log(`🔍 DEBUG - Bar time (24h PST): ${barTime}`);
+        console.log(`🔍 DEBUG - Bar time (24h): ${barTime}`);
         console.log(
           `🔍 DEBUG - Time comparison: ${barTime} >= ${startTime} && ${barTime} <= ${endTime} = ${
             barTime >= startTime && barTime <= endTime
           }`
         );
+        debugCount++;
       }
 
       // Check if this bar falls within our daily time window
@@ -217,56 +239,10 @@ export async function* streamCsvBars(
           ema_200: parseFloat(record.ema_200),
         };
 
-        // Build base log data
-        const logData: Record<string, unknown> = {
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-          volume: bar.volume,
-          delta: bar.delta,
-          cvd_close: bar.cvd_close,
-        };
-
-        // Add EMA value if requested
-        if (params?.emaMovingAverage) {
-          const requestedEma = `ema_${params.emaMovingAverage}` as keyof CsvBar;
-          const emaValue = bar[requestedEma];
-
-          console.log(
-            `🎯 EMA ${params.emaMovingAverage} requested - Value: ${emaValue}`
-          );
-          logData[`ema_${params.emaMovingAverage}`] = emaValue;
+        // Only log first few bars to avoid spam
+        if (barsFromThisFile < 3) {
+          console.log(`📊 Bar #${barsFromThisFile + 1} for ${timestamp}`);
         }
-
-        // Add ADX metrics if ADX period is specified
-        if (params?.adxPeriod) {
-          console.log(`📈 ADX Period ${params.adxPeriod} requested`);
-          console.log(
-            `📊 ADX Metrics - DX: ${bar.dx}, ADX: ${bar.adx}, ADXR: ${bar.adxr}`
-          );
-          console.log(
-            `📊 Directional Indicators - +DI: ${bar.plus_di}, -DI: ${bar.minus_di}`
-          );
-
-          logData.dx = bar.dx;
-          logData.adx = bar.adx;
-          logData.adxr = bar.adxr;
-          logData.plus_di = bar.plus_di;
-          logData.minus_di = bar.minus_di;
-        }
-
-        // Show ADX threshold check if specified
-        if (params?.adxThreshold) {
-          const meetsThreshold = (bar.adx ?? 0) >= params.adxThreshold;
-          console.log(
-            `🎯 ADX Threshold ${params.adxThreshold} - Current ADX: ${bar.adx} - Meets threshold: ${meetsThreshold}`
-          );
-          logData.adx_threshold_met = meetsThreshold;
-        }
-
-        // Log the complete bar data
-        console.log(`📊 Complete bar data for ${timestamp}:`, logData);
 
         yield bar;
 
