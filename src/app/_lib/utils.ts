@@ -8,7 +8,7 @@ export interface FormParams extends FormProp {
   end: string;
 }
 export function buildParams(input: FormProp): ApiParams {
-  const { startDate, startTime, endDate, endTime, ...rest } = input;
+  const { startDate, startTime, endDate, endTime } = input;
 
   console.log('🔍 DEBUG buildParams - Input:', {
     startDate,
