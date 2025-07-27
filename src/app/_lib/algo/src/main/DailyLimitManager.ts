@@ -6,6 +6,7 @@ export interface DailyStats {
   trades: number;
   hitDailyStop: boolean;
   hitDailyTarget: boolean;
+  tradingEnabled: boolean; // NEW: Track if trading is allowed
 }
 
 export class DailyLimitManager {
@@ -20,6 +21,7 @@ export class DailyLimitManager {
     this.maxDailyProfit = maxDailyProfit || Infinity;
   }
 
+  // NEW METHOD: Check if trading is allowed for the current timestamp
   canTrade(timestamp: string): boolean {
     const date = new Date(timestamp).toLocaleDateString('en-US');
 
@@ -34,6 +36,7 @@ export class DailyLimitManager {
           trades: 0,
           hitDailyStop: false,
           hitDailyTarget: false,
+          tradingEnabled: true, // Start each day with trading enabled
         });
       }
     }
@@ -41,8 +44,26 @@ export class DailyLimitManager {
     const todayStats = this.dailyStats.get(date);
     if (!todayStats) return true;
 
-    // Can always trade, but profits/losses will be capped
-    return true;
+    // Check if we've already hit limits today
+    if (todayStats.hitDailyStop || todayStats.hitDailyTarget) {
+      return false; // No more trading allowed today
+    }
+
+    // Check current P&L against limits
+    if (
+      this.maxDailyLoss !== -Infinity &&
+      todayStats.actualPnl <= this.maxDailyLoss
+    ) {
+      return false;
+    }
+    if (
+      this.maxDailyProfit !== Infinity &&
+      todayStats.actualPnl >= this.maxDailyProfit
+    ) {
+      return false;
+    }
+
+    return todayStats.tradingEnabled;
   }
 
   recordTrade(
@@ -64,26 +85,34 @@ export class DailyLimitManager {
         trades: 0,
         hitDailyStop: false,
         hitDailyTarget: false,
+        tradingEnabled: true,
       };
       this.dailyStats.set(date, todayStats);
     }
 
-    // Update actual P&L (uncapped)
+    // IMPORTANT: Always update actual P&L
     todayStats.actualPnl += profit;
     todayStats.trades++;
 
-    // Calculate capped P&L
-    const oldPnl = todayStats.pnl;
-    let newPnl = oldPnl + profit;
+    // Check if this trade puts us over limits
     let cappedProfit = profit;
     let hitLimit = false;
     let reason = '';
 
+    // For capped P&L calculation
+    const oldCappedPnl = todayStats.pnl;
+    let newCappedPnl = oldCappedPnl + profit;
+
     // Check if we hit the daily loss limit
-    if (this.maxDailyLoss !== -Infinity && newPnl <= this.maxDailyLoss) {
-      newPnl = this.maxDailyLoss;
-      cappedProfit = this.maxDailyLoss - oldPnl;
+    if (
+      this.maxDailyLoss !== -Infinity &&
+      todayStats.actualPnl <= this.maxDailyLoss
+    ) {
+      // Cap the displayed P&L at the limit
+      newCappedPnl = this.maxDailyLoss;
+      cappedProfit = this.maxDailyLoss - oldCappedPnl;
       todayStats.hitDailyStop = true;
+      todayStats.tradingEnabled = false; // Disable further trading
       hitLimit = true;
       reason = `Daily stop loss hit: $${Math.abs(this.maxDailyLoss).toFixed(
         2
@@ -92,23 +121,31 @@ export class DailyLimitManager {
     // Check if we hit the daily profit target
     else if (
       this.maxDailyProfit !== Infinity &&
-      newPnl >= this.maxDailyProfit
+      todayStats.actualPnl >= this.maxDailyProfit
     ) {
-      newPnl = this.maxDailyProfit;
-      cappedProfit = this.maxDailyProfit - oldPnl;
+      // Cap the displayed P&L at the limit
+      newCappedPnl = this.maxDailyProfit;
+      cappedProfit = this.maxDailyProfit - oldCappedPnl;
       todayStats.hitDailyTarget = true;
+      todayStats.tradingEnabled = false; // Disable further trading
       hitLimit = true;
       reason = `Daily profit target hit: $${this.maxDailyProfit.toFixed(2)}`;
     }
 
     // Update capped P&L
-    todayStats.pnl = newPnl;
+    todayStats.pnl = newCappedPnl;
 
     return {
       allowed: !hitLimit,
       reason: hitLimit ? reason : undefined,
       cappedProfit: cappedProfit,
     };
+  }
+
+  // Check if a specific date has hit limits
+  hasHitLimits(date: string): boolean {
+    const stats = this.dailyStats.get(date);
+    return stats ? stats.hitDailyStop || stats.hitDailyTarget : false;
   }
 
   getDailyStats(): DailyStats[] {
@@ -121,8 +158,20 @@ export class DailyLimitManager {
     const dailyPnL: Record<string, number> = {};
 
     for (const stats of this.dailyStats.values()) {
-      // Use the capped P&L, not the actual P&L
+      // Use the capped P&L for display
       dailyPnL[stats.date] = stats.pnl;
+    }
+
+    return dailyPnL;
+  }
+
+  // NEW: Get actual (uncapped) daily P&L
+  getDailyActualPnL(): Record<string, number> {
+    const dailyPnL: Record<string, number> = {};
+
+    for (const stats of this.dailyStats.values()) {
+      // Use the actual P&L
+      dailyPnL[stats.date] = stats.actualPnl;
     }
 
     return dailyPnL;
@@ -131,7 +180,13 @@ export class DailyLimitManager {
   getCurrentDayPnL(timestamp: string): number {
     const date = new Date(timestamp).toLocaleDateString('en-US');
     const todayStats = this.dailyStats.get(date);
-    return todayStats ? todayStats.pnl : 0;
+    return todayStats ? todayStats.actualPnl : 0; // Return actual P&L, not capped
+  }
+
+  getCurrentDayCappedPnL(timestamp: string): number {
+    const date = new Date(timestamp).toLocaleDateString('en-US');
+    const todayStats = this.dailyStats.get(date);
+    return todayStats ? todayStats.pnl : 0; // Return capped P&L
   }
 
   getSummary(): {
@@ -146,8 +201,10 @@ export class DailyLimitManager {
     totalActualPnL: number;
   } {
     const allDays = this.getDailyStats();
-    const profitableDays = allDays.filter((d) => d.pnl > 0);
-    const losingDays = allDays.filter((d) => d.pnl < 0);
+
+    // Use actual P&L for determining profitable/losing days
+    const profitableDays = allDays.filter((d) => d.actualPnl > 0);
+    const losingDays = allDays.filter((d) => d.actualPnl < 0);
 
     return {
       totalDays: allDays.length,
@@ -155,8 +212,8 @@ export class DailyLimitManager {
       losingDays: losingDays.length,
       daysHitStop: allDays.filter((d) => d.hitDailyStop).length,
       daysHitTarget: allDays.filter((d) => d.hitDailyTarget).length,
-      bestDay: Math.max(...allDays.map((d) => d.pnl), 0),
-      worstDay: Math.min(...allDays.map((d) => d.pnl), 0),
+      bestDay: Math.max(...allDays.map((d) => d.actualPnl), 0),
+      worstDay: Math.min(...allDays.map((d) => d.actualPnl), 0),
       totalCappedPnL: allDays.reduce((sum, d) => sum + d.pnl, 0),
       totalActualPnL: allDays.reduce((sum, d) => sum + d.actualPnl, 0),
     };

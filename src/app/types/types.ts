@@ -1,3 +1,5 @@
+// In your types/types.ts file, update the FormProp interface:
+
 export interface FormProp {
   startDate: string;
   startTime: string;
@@ -20,7 +22,13 @@ export interface FormProp {
   contractSize: number;
   stopLoss: number;
   takeProfit: number;
+
   // Daily limits
   maxDailyLoss?: number;
   maxDailyProfit?: number;
+
+  // Trailing Stop Settings
+  useTrailingStop?: boolean;
+  breakevenTrigger?: number;
+  trailDistance?: number;
 }

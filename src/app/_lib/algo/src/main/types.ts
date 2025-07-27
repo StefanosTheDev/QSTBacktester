@@ -53,6 +53,8 @@ export interface CsvBar {
 /**
  * Parameters passed from the frontend to configure the CSV backtest
  */
+// In your types.ts file, update the ApiParams interface:
+
 export interface ApiParams {
   start: string;
   end: string;
@@ -74,8 +76,12 @@ export interface ApiParams {
   takeProfit: number;
   maxDailyLoss?: number;
   maxDailyProfit?: number;
-}
 
+  // Trailing Stop Settings
+  useTrailingStop?: boolean;
+  breakevenTrigger?: number;
+  trailDistance?: number;
+}
 export interface Position {
   type: 'bullish' | 'bearish';
   entryPrice: number;

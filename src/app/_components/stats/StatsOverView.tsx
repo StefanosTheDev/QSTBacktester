@@ -15,6 +15,8 @@ interface StatsOverviewProps {
     daysHitStop?: number;
     daysHitTarget?: number;
     totalTradingDays?: number;
+    actualTotalProfit?: number;
+    actualDailyPnL?: Record<string, number>;
   };
   count: number;
 }
@@ -23,14 +25,20 @@ export default function StatsOverview({
   statistics,
   count,
 }: StatsOverviewProps) {
+  // Use actual P&L if available, otherwise fall back to regular P&L
+  const dailyPnL = statistics.actualDailyPnL || statistics.dailyPnL;
+  const totalPnL =
+    statistics.actualTotalProfit !== undefined
+      ? statistics.actualTotalProfit
+      : statistics.totalProfit ||
+        Object.values(dailyPnL).reduce((sum, pnl) => sum + pnl, 0);
+
   // Calculate green vs red days percentage
-  const profitableDays = Object.values(statistics.dailyPnL).filter(
+  const profitableDays = Object.values(dailyPnL).filter(
     (pnl) => pnl > 0
   ).length;
-  const losingDays = Object.values(statistics.dailyPnL).filter(
-    (pnl) => pnl < 0
-  ).length;
-  const totalDays = Object.keys(statistics.dailyPnL).length;
+  const losingDays = Object.values(dailyPnL).filter((pnl) => pnl < 0).length;
+  const totalDays = Object.keys(dailyPnL).length;
 
   const greenPercent =
     totalDays > 0 ? ((profitableDays / totalDays) * 100).toFixed(1) : '0';
@@ -38,11 +46,8 @@ export default function StatsOverview({
     totalDays > 0 ? ((losingDays / totalDays) * 100).toFixed(1) : '0';
 
   // Calculate additional metrics
-  const totalPnL =
-    statistics.totalProfit ||
-    Object.values(statistics.dailyPnL).reduce((sum, pnl) => sum + pnl, 0);
-  const bestDay = Math.max(...Object.values(statistics.dailyPnL), 0);
-  const worstDay = Math.min(...Object.values(statistics.dailyPnL));
+  const bestDay = Math.max(...Object.values(dailyPnL), 0);
+  const worstDay = Math.min(...Object.values(dailyPnL));
 
   // Format currency
   const formatCurrency = (amount: number) =>
@@ -54,8 +59,32 @@ export default function StatsOverview({
   // Format percentage
   const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
+  // Check if limits affected results
+  const hasLimits =
+    statistics.daysHitStop !== undefined ||
+    statistics.daysHitTarget !== undefined;
+  const limitsImpacted =
+    hasLimits &&
+    statistics.actualTotalProfit !== undefined &&
+    statistics.totalProfit !== undefined &&
+    Math.abs(statistics.actualTotalProfit - statistics.totalProfit) > 0.01;
+
   return (
     <div className="space-y-4">
+      {/* Warning if daily limits affected results */}
+      {limitsImpacted && (
+        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+          <h4 className="text-sm font-semibold text-yellow-800 mb-2">
+            ⚠️ Note: Results shown are ACTUAL performance
+          </h4>
+          <p className="text-sm text-yellow-700">
+            Daily limits would have capped P&L at{' '}
+            {formatCurrency(statistics.totalProfit || 0)}, but actual P&L was{' '}
+            {formatCurrency(totalPnL)}
+          </p>
+        </div>
+      )}
+
       {/* Green vs Red Days Display */}
       <div className="bg-gradient-to-r from-green-50 to-red-50 p-4 rounded-lg border border-gray-200">
         <h4 className="text-lg font-semibold mb-3 text-gray-800">
@@ -82,7 +111,10 @@ export default function StatsOverview({
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-          <h4 className="text-sm font-medium text-green-800">Total P&L</h4>
+          <h4 className="text-sm font-medium text-green-800">
+            Total P&L{' '}
+            {statistics.actualTotalProfit !== undefined ? '(Actual)' : ''}
+          </h4>
           <p
             className={`text-2xl font-bold ${
               totalPnL >= 0 ? 'text-green-600' : 'text-red-600'
@@ -156,8 +188,7 @@ export default function StatsOverview({
           <div className="flex justify-between">
             <span className="text-gray-600">Trading Days:</span>
             <span className="font-medium">
-              {statistics.totalTradingDays ||
-                Object.keys(statistics.dailyPnL).length}
+              {statistics.totalTradingDays || Object.keys(dailyPnL).length}
             </span>
           </div>
           <div className="flex justify-between">

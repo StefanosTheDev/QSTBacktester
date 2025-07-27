@@ -1,24 +1,49 @@
-// src/strategy/PositionManager.ts
+// src/strategy/PositionManager.ts - With Trailing Stop Feature
 import { CsvBar, Position, StrategyTrade, TradeRecord } from './types';
 import { TradeStatistics } from './TradeStatistics';
 
+interface TrailingStopConfig {
+  enabled: boolean;
+  breakevenTrigger: number;
+  trailDistance: number;
+}
+
+interface ExtendedPosition extends Position {
+  initialStopPrice: number;
+  highestProfit: number;
+  stopMovedToBreakeven: boolean;
+  isTrailing: boolean;
+}
+
 export class PositionManager {
-  private position: Position | null = null;
+  private position: ExtendedPosition | null = null;
   private statistics: TradeStatistics = new TradeStatistics();
   private stopLoss: number;
   private takeProfit: number;
   private contractSize: number;
+  private trailingConfig: TrailingStopConfig;
 
   // ES Mini futures constants
   private readonly TICK_SIZE = 0.25;
   private readonly TICK_VALUE = 12.5; // $12.50 per tick
   private readonly COMMISSION_PER_CONTRACT = 2.5; // Round trip commission
-  // REMOVED SLIPPAGE - NO MORE EXTRA TICKS
 
-  constructor(stopLoss: number, takeProfit: number, contractSize: number) {
+  constructor(
+    stopLoss: number,
+    takeProfit: number,
+    contractSize: number,
+    useTrailingStop: boolean = false,
+    breakevenTrigger: number = 3,
+    trailDistance: number = 2
+  ) {
     this.stopLoss = stopLoss;
     this.takeProfit = takeProfit;
     this.contractSize = contractSize;
+    this.trailingConfig = {
+      enabled: useTrailingStop,
+      breakevenTrigger,
+      trailDistance,
+    };
   }
 
   forceExit(
@@ -64,6 +89,10 @@ export class PositionManager {
     return this.position !== null;
   }
 
+  // In PositionManager.ts - Update the checkExit method with slippage protection
+
+  // In PositionManager.ts - Update the checkExit method with slippage protection
+
   checkExit(bar: CsvBar): {
     exited: boolean;
     reason?: string;
@@ -76,53 +105,135 @@ export class PositionManager {
     const { type, stopPrice, targetPrice, entryPrice } = this.position;
     let exitPrice: number | undefined;
     let reason: string | undefined;
+    let currentStopPrice = stopPrice;
+
+    // Update trailing stop if enabled
+    if (this.trailingConfig.enabled) {
+      currentStopPrice = this.updateTrailingStop(bar);
+    }
+
+    // MAXIMUM SLIPPAGE PROTECTION
+    const MAX_SLIPPAGE_POINTS = 0.25; // Maximum 0.25 points (1 tick) of slippage allowed
+    const MAX_SLIPPAGE_PERCENT = 0.0002; // Maximum 0.02% slippage allowed (tightened from 2%)
 
     if (type === 'bullish') {
-      // Check stop loss
-      if (bar.low <= stopPrice) {
-        // If bar opened below stop (gap down), exit at open
-        // Otherwise exit at stop price exactly
-        if (bar.open <= stopPrice) {
-          exitPrice = bar.open;
+      // Check stop loss (including trailing stop)
+      if (bar.low <= currentStopPrice) {
+        // If bar opened below stop (gap down), check for excessive slippage
+        if (bar.open <= currentStopPrice) {
+          const slippagePoints = currentStopPrice - bar.open;
+          const slippagePercent = slippagePoints / entryPrice;
+
+          // Check if slippage is excessive
+          if (
+            slippagePoints > MAX_SLIPPAGE_POINTS ||
+            slippagePercent > MAX_SLIPPAGE_PERCENT
+          ) {
+            console.log(
+              `⚠️ EXCESSIVE SLIPPAGE DETECTED: ${slippagePoints.toFixed(
+                2
+              )} points (${(slippagePercent * 100).toFixed(2)}%)`
+            );
+            console.log(
+              `   Entry: ${entryPrice}, Stop: ${currentStopPrice}, Open: ${bar.open}`
+            );
+
+            // Exit at maximum allowed slippage
+            exitPrice = currentStopPrice - MAX_SLIPPAGE_POINTS;
+            reason = 'stop-loss-max-slippage';
+          } else {
+            exitPrice = bar.open;
+            reason = 'stop-loss-gapped';
+          }
         } else {
-          exitPrice = stopPrice; // No slippage
+          exitPrice = currentStopPrice;
+          reason = this.position.isTrailing
+            ? 'trailing-stop'
+            : this.position.stopMovedToBreakeven
+            ? 'breakeven-stop'
+            : 'stop-loss';
         }
-        reason = 'stop-loss';
       }
       // Check take profit
       else if (bar.high >= targetPrice) {
-        // If bar opened above target (gap up), exit at open
-        // Otherwise exit at target price
         if (bar.open >= targetPrice) {
-          exitPrice = bar.open;
+          const slippagePoints = bar.open - targetPrice;
+          const slippagePercent = slippagePoints / entryPrice;
+
+          if (
+            slippagePoints > MAX_SLIPPAGE_POINTS ||
+            slippagePercent > MAX_SLIPPAGE_PERCENT
+          ) {
+            exitPrice = targetPrice + MAX_SLIPPAGE_POINTS;
+            reason = 'take-profit-max-slippage';
+          } else {
+            exitPrice = bar.open;
+            reason = 'take-profit-gapped';
+          }
         } else {
           exitPrice = targetPrice;
+          reason = 'take-profit';
         }
-        reason = 'take-profit';
       }
     } else {
       // bearish position
-      // Check stop loss
-      if (bar.high >= stopPrice) {
-        // If bar opened above stop (gap up), exit at open
-        // Otherwise exit at stop price exactly
-        if (bar.open >= stopPrice) {
-          exitPrice = bar.open;
+      // Check stop loss (including trailing stop)
+      if (bar.high >= currentStopPrice) {
+        // If bar opened above stop (gap up), check for excessive slippage
+        if (bar.open >= currentStopPrice) {
+          const slippagePoints = bar.open - currentStopPrice;
+          const slippagePercent = slippagePoints / entryPrice;
+
+          // Check if slippage is excessive
+          if (
+            slippagePoints > MAX_SLIPPAGE_POINTS ||
+            slippagePercent > MAX_SLIPPAGE_PERCENT
+          ) {
+            console.log(
+              `⚠️ EXCESSIVE SLIPPAGE DETECTED: ${slippagePoints.toFixed(
+                2
+              )} points (${(slippagePercent * 100).toFixed(2)}%)`
+            );
+            console.log(
+              `   Entry: ${entryPrice}, Stop: ${currentStopPrice}, Open: ${bar.open}`
+            );
+
+            // Exit at maximum allowed slippage
+            exitPrice = currentStopPrice + MAX_SLIPPAGE_POINTS;
+            reason = 'stop-loss-max-slippage';
+          } else {
+            exitPrice = bar.open;
+            reason = 'stop-loss-gapped';
+          }
         } else {
-          exitPrice = stopPrice; // No slippage
+          exitPrice = currentStopPrice;
+          reason = this.position.isTrailing
+            ? 'trailing-stop'
+            : this.position.stopMovedToBreakeven
+            ? 'breakeven-stop'
+            : 'stop-loss';
         }
-        reason = 'stop-loss';
       }
       // Check take profit
       else if (bar.low <= targetPrice) {
-        // If bar opened below target (gap down), exit at open
-        // Otherwise exit at target price
         if (bar.open <= targetPrice) {
-          exitPrice = bar.open;
+          const slippagePoints = targetPrice - bar.open;
+          const slippagePercent = slippagePoints / entryPrice;
+
+          if (
+            slippagePoints > MAX_SLIPPAGE_POINTS ||
+            slippagePercent > MAX_SLIPPAGE_PERCENT
+          ) {
+            exitPrice = targetPrice - MAX_SLIPPAGE_POINTS;
+            reason = 'take-profit-max-slippage';
+          } else {
+            exitPrice = bar.open;
+            reason = 'take-profit-gapped';
+          }
         } else {
           exitPrice = targetPrice;
+          reason = 'take-profit';
         }
-        reason = 'take-profit';
       }
     }
 
@@ -131,6 +242,16 @@ export class PositionManager {
         type === 'bullish' ? exitPrice - entryPrice : entryPrice - exitPrice;
 
       const totalProfit = this.calculateProfit(profitPoints);
+
+      // Log if this was a gap situation
+      if (reason.includes('gapped') || reason.includes('max-slippage')) {
+        console.log(
+          `📊 Gap Exit: ${type.toUpperCase()} ` +
+            `Entry: ${entryPrice.toFixed(2)} → Exit: ${exitPrice.toFixed(2)} ` +
+            `(${Math.abs(profitPoints).toFixed(2)} points) ` +
+            `Reason: ${reason}`
+        );
+      }
 
       const tradeRecord = this.createTradeRecord(
         bar,
@@ -151,6 +272,104 @@ export class PositionManager {
     }
 
     return { exited: false };
+  }
+  private updateTrailingStop(bar: CsvBar): number {
+    if (!this.position) {
+      throw new Error('updateTrailingStop called without an active position');
+    }
+
+    const { type, entryPrice, stopPrice } = this.position;
+    let currentProfit: number;
+    let newStopPrice = stopPrice;
+
+    if (type === 'bullish') {
+      currentProfit = bar.high - entryPrice;
+
+      // Update highest profit
+      if (currentProfit > this.position.highestProfit) {
+        this.position.highestProfit = currentProfit;
+      }
+
+      // Move to breakeven
+      if (
+        !this.position.stopMovedToBreakeven &&
+        this.position.highestProfit >= this.trailingConfig.breakevenTrigger
+      ) {
+        newStopPrice = entryPrice;
+        this.position.stopMovedToBreakeven = true;
+        this.position.stopPrice = newStopPrice;
+        console.log(
+          `   → Stop moved to breakeven at ${newStopPrice.toFixed(2)}`
+        );
+      }
+
+      // Start trailing
+      if (
+        this.position.stopMovedToBreakeven &&
+        this.position.highestProfit >=
+          this.trailingConfig.breakevenTrigger +
+            this.trailingConfig.trailDistance
+      ) {
+        const trailStopPrice =
+          entryPrice +
+          this.position.highestProfit -
+          this.trailingConfig.trailDistance;
+        if (trailStopPrice > this.position.stopPrice) {
+          newStopPrice =
+            Math.round(trailStopPrice / this.TICK_SIZE) * this.TICK_SIZE;
+          this.position.stopPrice = newStopPrice;
+          this.position.isTrailing = true;
+          console.log(
+            `   → Trailing stop updated to ${newStopPrice.toFixed(2)}`
+          );
+        }
+      }
+    } else {
+      // bearish position
+      currentProfit = entryPrice - bar.low;
+
+      // Update highest profit
+      if (currentProfit > this.position.highestProfit) {
+        this.position.highestProfit = currentProfit;
+      }
+
+      // Move to breakeven
+      if (
+        !this.position.stopMovedToBreakeven &&
+        this.position.highestProfit >= this.trailingConfig.breakevenTrigger
+      ) {
+        newStopPrice = entryPrice;
+        this.position.stopMovedToBreakeven = true;
+        this.position.stopPrice = newStopPrice;
+        console.log(
+          `   → Stop moved to breakeven at ${newStopPrice.toFixed(2)}`
+        );
+      }
+
+      // Start trailing
+      if (
+        this.position.stopMovedToBreakeven &&
+        this.position.highestProfit >=
+          this.trailingConfig.breakevenTrigger +
+            this.trailingConfig.trailDistance
+      ) {
+        const trailStopPrice =
+          entryPrice -
+          this.position.highestProfit +
+          this.trailingConfig.trailDistance;
+        if (trailStopPrice < this.position.stopPrice) {
+          newStopPrice =
+            Math.round(trailStopPrice / this.TICK_SIZE) * this.TICK_SIZE;
+          this.position.stopPrice = newStopPrice;
+          this.position.isTrailing = true;
+          console.log(
+            `   → Trailing stop updated to ${newStopPrice.toFixed(2)}`
+          );
+        }
+      }
+    }
+
+    return this.position.stopPrice;
   }
 
   private calculateProfit(profitPoints: number): number {
@@ -206,6 +425,7 @@ export class PositionManager {
       (profitPoints / this.TICK_SIZE) * this.TICK_VALUE * this.contractSize;
     const commission = this.COMMISSION_PER_CONTRACT * this.contractSize;
 
+    // FIX: Use the configured stop/target values, not the calculated distances
     return {
       entryDate: entryDateET,
       entryTime: entryTimeET,
@@ -215,10 +435,8 @@ export class PositionManager {
       exitPrice: exitPrice,
       type: this.position.type === 'bullish' ? 'LONG' : 'SHORT',
       contracts: this.contractSize,
-      stopLoss: Math.abs(this.position.stopPrice - this.position.entryPrice),
-      takeProfit: Math.abs(
-        this.position.targetPrice - this.position.entryPrice
-      ),
+      stopLoss: this.stopLoss, // Use the configured value
+      takeProfit: this.takeProfit, // Use the configured value
       exitReason: exitReason,
       profitLoss: grossProfit,
       commission: commission,
@@ -233,6 +451,23 @@ export class PositionManager {
     totalProfit: number
   ): void {
     if (!this.position) return;
+
+    // Calculate actual points moved for logging
+    const actualPointsMoved =
+      this.position.type === 'bullish'
+        ? exitPrice - this.position.entryPrice
+        : this.position.entryPrice - exitPrice;
+
+    // Log detailed trade info for debugging
+    console.log(
+      `   📊 Trade Details: ${this.position.type.toUpperCase()} ` +
+        `Entry: ${this.position.entryPrice.toFixed(
+          2
+        )} → Exit: ${exitPrice.toFixed(2)} ` +
+        `(${actualPointsMoved.toFixed(2)} points) ` +
+        `P&L: ${totalProfit.toFixed(2)} ` +
+        `Reason: ${reason}`
+    );
 
     const trade: StrategyTrade = {
       type: this.position.type,
@@ -251,7 +486,7 @@ export class PositionManager {
     signal: 'bullish' | 'bearish',
     entryPrice: number,
     bar: CsvBar
-  ): Position {
+  ): ExtendedPosition {
     // Round entry price to nearest tick
     const entry = Math.round(entryPrice / this.TICK_SIZE) * this.TICK_SIZE;
 
@@ -267,7 +502,12 @@ export class PositionManager {
       stopPrice: Math.round(stopPrice / this.TICK_SIZE) * this.TICK_SIZE,
       targetPrice: Math.round(targetPrice / this.TICK_SIZE) * this.TICK_SIZE,
       timestamp: bar.timestamp,
+      initialStopPrice: Math.round(stopPrice / this.TICK_SIZE) * this.TICK_SIZE,
+      highestProfit: 0,
+      stopMovedToBreakeven: false,
+      isTrailing: false,
     };
+
     return this.position;
   }
 

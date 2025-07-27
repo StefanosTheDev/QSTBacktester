@@ -1,4 +1,4 @@
-// src/strategy/csvMain.ts - Updated with Intraday High/Low Tracking
+// src/strategy/csvMain.ts - Fixed with Proper Daily Limit Enforcement
 import { ApiParams, CsvBar } from './types';
 import { PositionManager } from './PositionManager';
 import { SignalGenerator } from './SignalGenerator';
@@ -29,9 +29,12 @@ export interface BacktestResult {
     daysHitStop?: number;
     daysHitTarget?: number;
     totalTradingDays?: number;
+    // NEW: Add actual (uncapped) metrics
+    actualTotalProfit?: number;
+    actualDailyPnL?: Record<string, number>;
   };
   trades: TradeRecord[]; // For CSV export
-  intradayStats?: Record<string, IntradayStats>; // NEW: Intraday highs/lows
+  intradayStats?: Record<string, IntradayStats>; // Intraday highs/lows
 }
 
 export interface TradeRecord {
@@ -84,12 +87,25 @@ export async function run(
 
   logs.push(`🚀 Starting backtest from ${formData.start} → ${formData.end}`);
 
-  // Initialize trading components
+  // Initialize trading components with trailing stop config
   const positionManager = new PositionManager(
     formData.stopLoss,
     formData.takeProfit,
-    formData.contractSize
+    formData.contractSize,
+    formData.useTrailingStop || false,
+    formData.breakevenTrigger || 3,
+    formData.trailDistance || 2
   );
+
+  // Log trailing stop configuration
+  if (formData.useTrailingStop) {
+    logs.push(`📈 Trailing Stop Enabled:`);
+    logs.push(`   - Breakeven Trigger: ${formData.breakevenTrigger} points`);
+    logs.push(`   - Trail Distance: ${formData.trailDistance} points`);
+  } else {
+    logs.push(`📊 Using Static Stops: ${formData.stopLoss} points`);
+  }
+
   const signalGenerator = new SignalGenerator();
   const dailyLimitManager = new DailyLimitManager(
     formData.maxDailyLoss,
@@ -192,6 +208,13 @@ export async function run(
           )})`
         );
       }
+
+      // Check if new day has already hit limits (shouldn't happen, but be safe)
+      if (!dailyLimitManager.canTrade(bar.timestamp)) {
+        logs.push(
+          `⛔ Trading disabled for ${barDay} - Daily limit already reached`
+        );
+      }
     }
 
     // Skip first bar (no previous bar to enter on)
@@ -206,7 +229,89 @@ export async function run(
     const barHour = barDate.getHours();
     const barMinute = barDate.getMinutes();
 
-    // FIRST: Force exit if near market close (3:55 PM = 15:55)
+    // CHECK FOR EXTREME GAPS
+    if (prevBar) {
+      const gapPoints = Math.abs(bar.open - prevBar.close);
+      const gapPercent = gapPoints / prevBar.close;
+
+      // Flag gaps larger than 10 points as extreme (0.2% for ES around 5000)
+      if (gapPoints > 10) {
+        logs.push(
+          `⚠️ EXTREME GAP DETECTED: ${gapPoints.toFixed(2)} points (${(
+            gapPercent * 100
+          ).toFixed(2)}%) - ` +
+            `Previous close: ${prevBar.close.toFixed(
+              2
+            )}, Current open: ${bar.open.toFixed(2)}`
+        );
+
+        // If we have a position during an extreme gap, we need to exit it
+        if (positionManager.hasPosition()) {
+          logs.push(
+            `🚨 CRITICAL: Open position during extreme gap - EXIT WILL BE LIMITED TO REALISTIC SLIPPAGE`
+          );
+          // The position manager will handle the exit with 0.25 point max slippage
+        }
+
+        // Don't allow new entries during extreme gaps
+        if (pendingSignal) {
+          logs.push(`❌ Cancelling pending signal due to extreme gap`);
+          pendingSignal = null;
+        }
+
+        // Skip processing new signals during extreme gap bars
+        // This prevents entering new positions when market is gapping
+      }
+    }
+
+    // FIRST: Check if we can still trade today
+    if (!dailyLimitManager.canTrade(bar.timestamp)) {
+      // If we have a position but can't trade, we need to exit it
+      if (positionManager.hasPosition()) {
+        const exitResult = positionManager.forceExit(
+          bar,
+          'daily-limit-reached'
+        );
+        if (exitResult.exited) {
+          const exitDateTime = new Date(bar.timestamp);
+          const exitDateStr = exitDateTime.toLocaleDateString('en-US');
+          const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
+
+          logs.push(
+            `🛑 Forced Exit: daily-limit-reached @ ${exitResult.exitPrice?.toFixed(
+              2
+            )} on ${exitDateStr} ${exitTimeStr} - Profit: ${exitResult.profit?.toFixed(
+              2
+            )}`
+          );
+
+          // Record the trade
+          const limitResult = dailyLimitManager.recordTrade(
+            bar.timestamp,
+            exitResult.profit || 0
+          );
+
+          // Update intraday tracking
+          currentDayPnL = dailyLimitManager.getCurrentDayPnL(bar.timestamp);
+          currentDayMaxHigh = Math.max(currentDayMaxHigh, currentDayPnL);
+          currentDayMaxLow = Math.min(currentDayMaxLow, currentDayPnL);
+          currentDayTrades++;
+
+          if (exitResult.tradeRecord) {
+            trades.push(exitResult.tradeRecord);
+          }
+
+          lastSignal = null;
+          pendingSignal = null;
+        }
+      }
+
+      // Skip all other processing for this bar
+      prevBar = bar;
+      continue;
+    }
+
+    // SECOND: Force exit if near market close (3:55 PM = 15:55)
     if (positionManager.hasPosition() && barHour === 15 && barMinute >= 55) {
       const exitResult = positionManager.forceExit(bar, 'end-of-day');
       if (exitResult.exited) {
@@ -229,10 +334,14 @@ export async function run(
         );
 
         // Update intraday tracking
-        currentDayPnL += limitResult.cappedProfit || exitResult.profit || 0;
+        currentDayPnL = dailyLimitManager.getCurrentDayPnL(bar.timestamp);
         currentDayMaxHigh = Math.max(currentDayMaxHigh, currentDayPnL);
         currentDayMaxLow = Math.min(currentDayMaxLow, currentDayPnL);
         currentDayTrades++;
+
+        if (!limitResult.allowed) {
+          logs.push(`🛑 ${limitResult.reason}`);
+        }
 
         if (exitResult.tradeRecord) {
           trades.push(exitResult.tradeRecord);
@@ -243,7 +352,7 @@ export async function run(
       }
     }
 
-    // SECOND: Check for normal position exits
+    // THIRD: Check for normal position exits
     if (positionManager.hasPosition()) {
       const exitResult = positionManager.checkExit(bar);
       if (exitResult.exited) {
@@ -258,35 +367,35 @@ export async function run(
         );
 
         // Update intraday tracking
-        currentDayPnL += limitResult.cappedProfit || exitResult.profit || 0;
+        currentDayPnL = dailyLimitManager.getCurrentDayPnL(bar.timestamp);
         currentDayMaxHigh = Math.max(currentDayMaxHigh, currentDayPnL);
         currentDayMaxLow = Math.min(currentDayMaxLow, currentDayPnL);
         currentDayTrades++;
 
-        // Use the capped profit for display and statistics
-        const displayProfit =
-          limitResult.cappedProfit || exitResult.profit || 0;
+        // Enhanced logging with actual points moved
+        const actualPoints = exitResult.tradeRecord
+          ? Math.abs(
+              exitResult.tradeRecord.exitPrice -
+                exitResult.tradeRecord.entryPrice
+            )
+          : 0;
 
         logs.push(
           `🚪 Exit: ${exitResult.reason} @ ${exitResult.exitPrice?.toFixed(
             2
-          )} on ${exitDateStr} ${exitTimeStr} - Profit: $${displayProfit.toFixed(
+          )} on ${exitDateStr} ${exitTimeStr} - Profit: $${exitResult.profit?.toFixed(
             2
-          )}`
+          )} (${actualPoints.toFixed(2)} points)`
         );
 
         if (!limitResult.allowed) {
           logs.push(`🛑 ${limitResult.reason}`);
+          logs.push(`⛔ STOPPING TRADING FOR THE DAY - Daily limit reached`);
+          pendingSignal = null; // Clear any pending signals
         }
 
-        // Store trade for CSV export with actual profit (not capped)
+        // Store trade for CSV export
         if (exitResult.tradeRecord) {
-          // Add note if profit was capped
-          if (limitResult.cappedProfit !== exitResult.profit) {
-            exitResult.tradeRecord.exitReason += ` (capped from $${exitResult.profit?.toFixed(
-              2
-            )})`;
-          }
           trades.push(exitResult.tradeRecord);
         }
 
@@ -295,8 +404,12 @@ export async function run(
       }
     }
 
-    // THIRD: Execute pending entry signal at market open
-    if (pendingSignal && !positionManager.hasPosition()) {
+    // FOURTH: Execute pending entry signal at market open (only if we can still trade)
+    if (
+      pendingSignal &&
+      !positionManager.hasPosition() &&
+      dailyLimitManager.canTrade(bar.timestamp)
+    ) {
       // Enter at the open of current bar (realistic execution)
       const entryPrice = bar.open;
 
@@ -353,8 +466,12 @@ export async function run(
       continue;
     }
 
-    // FOURTH: Generate signals (only if not in position and no pending signal)
-    if (!positionManager.hasPosition() && !pendingSignal) {
+    // FIFTH: Generate signals (only if not in position, no pending signal, and can trade)
+    if (
+      !positionManager.hasPosition() &&
+      !pendingSignal &&
+      dailyLimitManager.canTrade(bar.timestamp)
+    ) {
       // Analyze using HISTORICAL data only
       const trendlines = fitTrendlinesWindow(cvdWindow);
       let signal = trendlines.breakout;
@@ -424,11 +541,11 @@ export async function run(
   const baseStats = positionManager.getStatistics().getStatistics();
   const dailyLimitStats = dailyLimitManager.getSummary();
 
-  // Override with capped values
+  // Create statistics with BOTH capped and actual values
   const stats: BacktestResult['statistics'] = {
     ...baseStats,
-    totalProfit: dailyLimitStats.totalCappedPnL,
-    dailyPnL: dailyLimitManager.getDailyCappedPnL(), // Use capped daily P&L
+    totalProfit: dailyLimitStats.totalActualPnL, // Use ACTUAL P&L as the main metric
+    dailyPnL: dailyLimitManager.getDailyActualPnL(), // Use ACTUAL daily P&L
     daysHitStop: dailyLimitStats.daysHitStop,
     daysHitTarget: dailyLimitStats.daysHitTarget,
     totalTradingDays: dailyLimitStats.totalDays,
@@ -438,9 +555,12 @@ export async function run(
       avgWinPoints: number;
       avgLossPoints: number;
     },
+    // Include actual values for transparency
+    actualTotalProfit: dailyLimitStats.totalActualPnL,
+    actualDailyPnL: dailyLimitManager.getDailyActualPnL(),
   };
 
-  // Recalculate average profit based on capped total
+  // Recalculate average profit based on actual total
   if (stats.totalTrades > 0 && stats.totalProfit !== undefined) {
     stats.averageProfit = stats.totalProfit / stats.totalTrades;
   }
@@ -501,12 +621,10 @@ export async function run(
     logs.push(`   - Best Day: $${dailyLimitStats.bestDay.toFixed(2)}`);
     logs.push(`   - Worst Day: $${dailyLimitStats.worstDay.toFixed(2)}`);
     logs.push(
-      `\n   - Total P&L (with limits): $${dailyLimitStats.totalCappedPnL.toFixed(
-        2
-      )}`
+      `\n   - Total P&L (ACTUAL): $${dailyLimitStats.totalActualPnL.toFixed(2)}`
     );
     logs.push(
-      `   - Total P&L (without limits): $${dailyLimitStats.totalActualPnL.toFixed(
+      `   - Total P&L (if capped): $${dailyLimitStats.totalCappedPnL.toFixed(
         2
       )}`
     );
@@ -514,8 +632,109 @@ export async function run(
     const difference =
       dailyLimitStats.totalActualPnL - dailyLimitStats.totalCappedPnL;
     if (Math.abs(difference) > 0.01) {
-      logs.push(`   - Difference: $${difference.toFixed(2)}`);
+      logs.push(
+        `   - Difference (impact of limits): $${difference.toFixed(2)}`
+      );
     }
+  }
+
+  // Validate trades against expected P&L
+  logs.push(`\n🔍 Trade Validation Summary:`);
+
+  const expectedWinPL =
+    (formData.takeProfit / 0.25) * 12.5 * formData.contractSize -
+    2.5 * formData.contractSize;
+  const expectedLossPL =
+    -(formData.stopLoss / 0.25) * 12.5 * formData.contractSize -
+    2.5 * formData.contractSize;
+
+  logs.push(
+    `   - Expected Win P&L: $${expectedWinPL.toFixed(2)} (${
+      formData.takeProfit
+    } points)`
+  );
+  logs.push(
+    `   - Expected Loss P&L: $${expectedLossPL.toFixed(2)} (${
+      formData.stopLoss
+    } points)`
+  );
+
+  // Check for anomalies
+  let anomalies = 0;
+  let extremeAnomalies = 0;
+  trades.forEach((trade, idx) => {
+    const pointsMoved = Math.abs(trade.exitPrice - trade.entryPrice);
+    const isAnomaly =
+      (trade.netProfitLoss > 0 &&
+        Math.abs(trade.netProfitLoss - expectedWinPL) > expectedWinPL * 0.1) ||
+      (trade.netProfitLoss < 0 &&
+        Math.abs(trade.netProfitLoss - expectedLossPL) >
+          Math.abs(expectedLossPL) * 0.1);
+
+    const isExtreme = Math.abs(trade.netProfitLoss) > 1000; // Flag trades over $1000
+
+    if (isAnomaly) {
+      anomalies++;
+      if (isExtreme) {
+        extremeAnomalies++;
+        logs.push(
+          `   ⚠️ EXTREME: Trade #${idx + 1}: ${pointsMoved.toFixed(
+            2
+          )} points, ` +
+            `P&L: $${trade.netProfitLoss.toFixed(2)}, ` +
+            `Exit: ${trade.exitReason}`
+        );
+      }
+    }
+  });
+
+  if (anomalies > 0) {
+    logs.push(
+      `   ⚠️ Found ${anomalies} trades with unexpected P&L (${extremeAnomalies} extreme)`
+    );
+  } else {
+    logs.push(`   ✅ All trades match expected P&L values`);
+  }
+
+  // Validate daily limits were properly enforced
+  const dailyStats = dailyLimitManager.getDailyStats();
+  let limitViolations = 0;
+  let tradingAfterLimit = 0;
+
+  dailyStats.forEach((day) => {
+    // Check if actual P&L exceeded limits
+    if (formData.maxDailyLoss && day.actualPnl < -formData.maxDailyLoss) {
+      limitViolations++;
+      logs.push(
+        `   ❌ ${day.date}: Actual P&L $${day.actualPnl.toFixed(
+          2
+        )} exceeded daily loss limit of $${formData.maxDailyLoss}`
+      );
+    }
+    if (formData.maxDailyProfit && day.actualPnl > formData.maxDailyProfit) {
+      limitViolations++;
+      logs.push(
+        `   ❌ ${day.date}: Actual P&L $${day.actualPnl.toFixed(
+          2
+        )} exceeded daily profit target of $${formData.maxDailyProfit}`
+      );
+    }
+
+    // Check if trading continued after hitting limits
+    if ((day.hitDailyStop || day.hitDailyTarget) && !day.tradingEnabled) {
+      // This is correct - trading was disabled
+    } else if ((day.hitDailyStop || day.hitDailyTarget) && day.tradingEnabled) {
+      tradingAfterLimit++;
+      logs.push(`   ❌ ${day.date}: Trading continued after hitting limit!`);
+    }
+  });
+
+  if (limitViolations === 0 && tradingAfterLimit === 0) {
+    logs.push(`   ✅ All daily limits were properly enforced`);
+  } else {
+    logs.push(
+      `   ❌ Found ${limitViolations} limit violations and ${tradingAfterLimit} days with trading after limits`
+    );
   }
 
   return {

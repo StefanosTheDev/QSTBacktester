@@ -21,6 +21,13 @@ interface TradeRecord {
   netProfitLoss: number;
 }
 
+// Add trailing stop fields to FormProp in your types file
+interface FormPropExtended {
+  useTrailingStop?: boolean;
+  breakevenTrigger?: number;
+  trailDistance?: number;
+}
+
 // Define the result type to match your BacktestResult
 interface BacktestResults {
   count: number;
@@ -78,6 +85,11 @@ export default function AlgoForm() {
     // New daily limit fields
     maxDailyLoss: 1500, // Default $1500 max daily loss
     maxDailyProfit: 2000, // Default $2000 max daily profit
+
+    // Trailing stop fields
+    useTrailingStop: false,
+    breakevenTrigger: 3, // Move to breakeven after 3 points profit
+    trailDistance: 2, // Trail by 2 points
   });
 
   const [loading, setLoading] = useState(false);
@@ -138,9 +150,9 @@ export default function AlgoForm() {
     }
   };
 
-  // const toggleView = () => {
-  //   setShowForm(!showForm);
-  // };
+  const toggleView = () => {
+    setShowForm(!showForm);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10">
@@ -395,6 +407,66 @@ export default function AlgoForm() {
                         className="mt-1 border rounded px-3 py-2 text-gray-800"
                       />
                     </label>
+                  </div>
+
+                  {/* Trailing Stop Toggle */}
+                  <div className="mt-4 space-y-4">
+                    <label className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        name="useTrailingStop"
+                        checked={values.useTrailingStop}
+                        onChange={(e) =>
+                          setValues((prev) => ({
+                            ...prev,
+                            useTrailingStop: e.target.checked,
+                          }))
+                        }
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        Enable Trailing Stop
+                      </span>
+                    </label>
+
+                    {values.useTrailingStop && (
+                      <div className="ml-7 grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
+                        <label className="flex flex-col">
+                          <span className="text-sm text-gray-600">
+                            Breakeven Trigger (pts)
+                          </span>
+                          <input
+                            type="number"
+                            name="breakevenTrigger"
+                            value={values.breakevenTrigger || ''}
+                            onChange={handleChange}
+                            min="1"
+                            placeholder="3"
+                            className="mt-1 border rounded px-3 py-2 text-gray-800"
+                          />
+                          <span className="text-xs text-gray-500 mt-1">
+                            Move stop to breakeven after this profit
+                          </span>
+                        </label>
+                        <label className="flex flex-col">
+                          <span className="text-sm text-gray-600">
+                            Trail Distance (pts)
+                          </span>
+                          <input
+                            type="number"
+                            name="trailDistance"
+                            value={values.trailDistance || ''}
+                            onChange={handleChange}
+                            min="1"
+                            placeholder="2"
+                            className="mt-1 border rounded px-3 py-2 text-gray-800"
+                          />
+                          <span className="text-xs text-gray-500 mt-1">
+                            Points to trail below highest profit
+                          </span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
 
