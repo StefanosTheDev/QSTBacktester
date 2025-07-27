@@ -285,11 +285,11 @@ export async function run(
             )}`
           );
 
-          // Record the trade
-          const limitResult = dailyLimitManager.recordTrade(
-            bar.timestamp,
-            exitResult.profit || 0
-          );
+          // // Record the trade
+          // const limitResult = dailyLimitManager.recordTrade(
+          //   bar.timestamp,
+          //   exitResult.profit || 0
+          // );
 
           // Update intraday tracking
           currentDayPnL = dailyLimitManager.getCurrentDayPnL(bar.timestamp);

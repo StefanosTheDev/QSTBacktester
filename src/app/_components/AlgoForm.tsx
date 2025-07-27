@@ -22,11 +22,11 @@ interface TradeRecord {
 }
 
 // Add trailing stop fields to FormProp in your types file
-interface FormPropExtended {
-  useTrailingStop?: boolean;
-  breakevenTrigger?: number;
-  trailDistance?: number;
-}
+// interface FormPropExtended {
+//   useTrailingStop?: boolean;
+//   breakevenTrigger?: number;
+//   trailDistance?: number;
+// }
 
 // Define the result type to match your BacktestResult
 interface BacktestResults {
@@ -150,9 +150,9 @@ export default function AlgoForm() {
     }
   };
 
-  const toggleView = () => {
-    setShowForm(!showForm);
-  };
+  // const toggleView = () => {
+  //   setShowForm(!showForm);
+  // };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10">
