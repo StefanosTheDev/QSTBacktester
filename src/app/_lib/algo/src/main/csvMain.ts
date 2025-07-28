@@ -5,7 +5,13 @@ import { SignalGenerator } from './SignalGenerator';
 import { fitTrendlinesWindow } from './TrendLineAnalysis';
 import { DailyLimitManager } from './DailyLimitManager';
 import { streamCsvBars } from './readCSV';
-process.env.TZ = 'America/Los_Angeles';
+import { DateTime } from 'luxon';
+
+// Fallback timezone override
+if (process.env.TZ !== 'America/Los_Angeles') {
+  process.env.TZ = 'America/Los_Angeles';
+  console.warn('TZ overridden to America/Los_Angeles');
+}
 
 export interface BacktestResult {
   count: number;
@@ -71,18 +77,26 @@ interface PendingSignal {
 
 // Utility function for consistent date formatting (matches DailyLimitManager)
 function getDateKey(timestamp: string): string {
-  const datePart = timestamp.split(' ')[0];
+  // Use Luxon for consistent parsing in America/Los_Angeles timezone
+  const dt = DateTime.fromFormat(timestamp, 'yyyy-MM-dd hh:mm:ss a', {
+    zone: 'America/Los_Angeles',
+  });
+  if (dt.isValid) {
+    return dt.toFormat('MM/dd/yyyy');
+  }
 
+  // Fallback if format doesn't match
+  const datePart = timestamp.split(' ')[0];
   if (datePart && datePart.includes('-')) {
     const [year, month, day] = datePart.split('-');
     return `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
   }
 
-  const date = new Date(timestamp);
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${month}/${day}/${year}`;
+  // Additional fallback
+  const fallbackDt = DateTime.fromISO(timestamp, {
+    zone: 'America/Los_Angeles',
+  });
+  return fallbackDt.isValid ? fallbackDt.toFormat('MM/dd/yyyy') : '';
 }
 
 export async function run(
@@ -96,22 +110,42 @@ export async function run(
   logs.push(
     `   - Server Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
   );
-  logs.push(`   - Server Time Now: ${new Date().toString()}`);
   logs.push(
-    `   - Server UTC Offset: ${new Date().getTimezoneOffset()} minutes`
+    `   - Server Time Now: ${DateTime.now()
+      .setZone('America/Los_Angeles')
+      .toString()}`
+  );
+  logs.push(
+    `   - Server UTC Offset: ${
+      DateTime.now().setZone('America/Los_Angeles').offset
+    } minutes`
   );
   logs.push(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
   logs.push(`   - TZ env var: ${process.env.TZ || 'not set'}`);
+  logs.push(
+    `   - Effective TZ after set: ${
+      Intl.DateTimeFormat().resolvedOptions().timeZone
+    }`
+  );
+  logs.push(
+    `   - Test Local Time: ${DateTime.fromFormat(
+      '2025-01-15 09:30:00 AM',
+      'yyyy-MM-dd hh:mm:ss a',
+      { zone: 'America/Los_Angeles' }
+    ).toLocaleString()}`
+  );
 
   // Test date parsing with your actual input format
   const testTimestamp = '2025-01-15 09:30:00 AM';
   logs.push(`\n🔍 PARSING TEST for: "${testTimestamp}"`);
 
-  // Method 1: Direct Date constructor
-  const method1 = new Date(testTimestamp);
-  logs.push(`   Method 1 (new Date()): ${method1.toString()}`);
-  logs.push(`   Method 1 ISO: ${method1.toISOString()}`);
-  logs.push(`   Method 1 Hours: ${method1.getHours()}`);
+  // Method 1: Luxon (recommended)
+  const luxonDt = DateTime.fromFormat(testTimestamp, 'yyyy-MM-dd hh:mm:ss a', {
+    zone: 'America/Los_Angeles',
+  });
+  logs.push(`   Method (Luxon): ${luxonDt.toString()}`);
+  logs.push(`   Luxon ISO: ${luxonDt.toISO()}`);
+  logs.push(`   Luxon Hours: ${luxonDt.hour}`);
 
   // Test with actual start/end parameters
   logs.push(`\n📅 ACTUAL PARAMETERS:`);
@@ -278,10 +312,12 @@ export async function run(
       continue;
     }
 
-    // Extract hour and minute from bar timestamp
-    const barDate = new Date(bar.timestamp);
-    const barHour = barDate.getHours();
-    const barMinute = barDate.getMinutes();
+    // Extract hour and minute from bar timestamp using Luxon
+    const barDt = DateTime.fromFormat(bar.timestamp, 'yyyy-MM-dd hh:mm:ss a', {
+      zone: 'America/Los_Angeles',
+    });
+    const barHour = barDt.hour;
+    const barMinute = barDt.minute;
 
     // CHECK FOR EXTREME GAPS
     if (prevBar) {
@@ -328,8 +364,12 @@ export async function run(
         );
         if (exitResult.exited) {
           const exitDateStr = getDateKey(bar.timestamp);
-          const exitDateTime = new Date(bar.timestamp);
-          const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
+          const exitDt = DateTime.fromFormat(
+            bar.timestamp,
+            'yyyy-MM-dd hh:mm:ss a',
+            { zone: 'America/Los_Angeles' }
+          );
+          const exitTimeStr = exitDt.toLocaleString(DateTime.TIME_SIMPLE);
 
           logs.push(
             `🛑 Forced Exit: daily-limit-reached @ ${exitResult.exitPrice?.toFixed(
@@ -367,8 +407,12 @@ export async function run(
       const exitResult = positionManager.forceExit(bar, 'end-of-day');
       if (exitResult.exited) {
         const exitDateStr = getDateKey(bar.timestamp);
-        const exitDateTime = new Date(bar.timestamp);
-        const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
+        const exitDt = DateTime.fromFormat(
+          bar.timestamp,
+          'yyyy-MM-dd hh:mm:ss a',
+          { zone: 'America/Los_Angeles' }
+        );
+        const exitTimeStr = exitDt.toLocaleString(DateTime.TIME_SIMPLE);
 
         logs.push(
           `🕐 Forced Exit: end-of-day @ ${exitResult.exitPrice?.toFixed(
@@ -401,8 +445,12 @@ export async function run(
       const exitResult = positionManager.checkExit(bar);
       if (exitResult.exited) {
         const exitDateStr = getDateKey(bar.timestamp);
-        const exitDateTime = new Date(bar.timestamp);
-        const exitTimeStr = exitDateTime.toLocaleTimeString('en-US');
+        const exitDt = DateTime.fromFormat(
+          bar.timestamp,
+          'yyyy-MM-dd hh:mm:ss a',
+          { zone: 'America/Los_Angeles' }
+        );
+        const exitTimeStr = exitDt.toLocaleString(DateTime.TIME_SIMPLE);
 
         // Record the trade with daily limit manager
         const limitResult = dailyLimitManager.recordTrade(
@@ -470,8 +518,12 @@ export async function run(
           bar
         );
         const entryDateStr = getDateKey(bar.timestamp);
-        const entryDateTime = new Date(bar.timestamp);
-        const entryTimeStr = entryDateTime.toLocaleTimeString('en-US');
+        const entryDt = DateTime.fromFormat(
+          bar.timestamp,
+          'yyyy-MM-dd hh:mm:ss a',
+          { zone: 'America/Los_Angeles' }
+        );
+        const entryTimeStr = entryDt.toLocaleString(DateTime.TIME_SIMPLE);
 
         logs.push(
           `📈 Entry: ${pendingSignal.type.toUpperCase()} @ ${entryPrice.toFixed(
@@ -554,8 +606,12 @@ export async function run(
           signalBar: bar,
         };
         const signalDateStr = getDateKey(bar.timestamp);
-        const signalDateTime = new Date(bar.timestamp);
-        const signalTimeStr = signalDateTime.toLocaleTimeString('en-US');
+        const signalDt = DateTime.fromFormat(
+          bar.timestamp,
+          'yyyy-MM-dd hh:mm:ss a',
+          { zone: 'America/Los_Angeles' }
+        );
+        const signalTimeStr = signalDt.toLocaleString(DateTime.TIME_SIMPLE);
 
         logs.push(
           `🔔 Signal generated: ${signal.toUpperCase()} on ${signalDateStr} ${signalTimeStr} - Will enter on next bar open`
