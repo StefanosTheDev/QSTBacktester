@@ -1,4 +1,4 @@
-// src/strategy/readCSV.ts - FIXED VERSION WITH TIMEZONE-AGNOSTIC PARSING
+// src/strategy/readCSV.ts - TRULY TIMEZONE-AGNOSTIC VERSION
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
@@ -7,13 +7,17 @@ import { getTradingDates } from '../utils';
 
 const BASE_DIR = path.join(process.cwd(), 'src/app/_lib/algo/src/csv_database');
 
-// Parse timestamp ensuring consistent interpretation regardless of server timezone
-function parsePSTTimestamp(timestamp: string): Date {
-  // Handle edge cases
-  if (!timestamp) {
-    throw new Error('Timestamp is undefined or empty');
-  }
-
+// Helper to parse timestamp components without creating Date objects
+function parseTimestampToComponents(timestamp: string): {
+  year: number;
+  month: number;
+  day: number;
+  hour24: number;
+  minute: number;
+  second: number;
+  dateKey: string;
+  timeKey: string;
+} {
   // "2025-01-15 09:30:00 AM" → parse components
   const parts = timestamp.split(' ');
   if (parts.length !== 3) {
@@ -59,41 +63,34 @@ function parsePSTTimestamp(timestamp: string): Date {
   if (ampm === 'PM' && hours !== 12) hours += 12;
   if (ampm === 'AM' && hours === 12) hours = 0;
 
-  // IMPORTANT: Create date in LOCAL time, not UTC
-  // Since we're comparing times as strings later, we need consistent behavior
-  // This creates the date as if the server were in PST
-  return new Date(year, month - 1, day, hours, minutes, seconds);
-}
-
-// Extract time in 24-hour format directly from timestamp string
-// This avoids all timezone conversion issues
-function extractTimeFromTimestamp(timestamp: string): string {
-  // "2025-01-15 9:30:00 AM" → "09:30:00"
-  const parts = timestamp.split(' ');
-  if (parts.length !== 3) return '00:00:00';
-
-  const timePart = parts[1]; // "9:30:00"
-  const ampm = parts[2]; // "AM" or "PM"
-
-  const timeParts = timePart.split(':');
-  if (timeParts.length !== 3) return '00:00:00';
-
-  let hours = parseInt(timeParts[0]);
-  const minutes = timeParts[1];
-  const seconds = timeParts[2];
-
-  // Convert to 24-hour format
-  if (ampm === 'PM' && hours !== 12) {
-    hours += 12;
-  } else if (ampm === 'AM' && hours === 12) {
-    hours = 0;
-  }
-
-  // Return in 24-hour format with zero padding
-  return `${hours.toString().padStart(2, '0')}:${minutes.padStart(
+  // Create standardized keys for comparison
+  const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(
+    day
+  ).padStart(2, '0')}`;
+  const timeKey = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(
     2,
     '0'
-  )}:${seconds.padStart(2, '0')}`;
+  )}:${String(seconds).padStart(2, '0')}`;
+
+  return {
+    year,
+    month,
+    day,
+    hour24: hours,
+    minute: minutes,
+    second: seconds,
+    dateKey,
+    timeKey,
+  };
+}
+
+// Convert components to a date number for easy comparison
+function componentsToDateNumber(
+  year: number,
+  month: number,
+  day: number
+): number {
+  return year * 10000 + month * 100 + day;
 }
 
 export async function* streamCsvBars(
@@ -107,23 +104,21 @@ export async function* streamCsvBars(
     cvdLookBackBars?: number;
   }
 ): AsyncGenerator<CsvBar> {
-  // Parse start and end dates using the same function used in csvMain.ts
-  let startDate: Date;
-  let endDate: Date;
+  // Parse start and end into components (no Date objects!)
+  const startComponents = parseTimestampToComponents(start);
+  const endComponents = parseTimestampToComponents(end);
 
-  try {
-    startDate = parsePSTTimestamp(start);
-    endDate = parsePSTTimestamp(end);
-  } catch (error) {
-    console.error('Error parsing start/end dates:', error);
-    console.error('Start input:', start);
-    console.error('End input:', end);
-    throw new Error(`Failed to parse date parameters: ${error}`);
-  }
-
-  // Extract times directly from the input strings (avoiding timezone issues)
-  const startTime = extractTimeFromTimestamp(start);
-  const endTime = extractTimeFromTimestamp(end);
+  // Convert to numbers for easy date comparison
+  const startDateNum = componentsToDateNumber(
+    startComponents.year,
+    startComponents.month,
+    startComponents.day
+  );
+  const endDateNum = componentsToDateNumber(
+    endComponents.year,
+    endComponents.month,
+    endComponents.day
+  );
 
   // Get only valid trading dates (excludes weekends and holidays)
   const tradingDates = getTradingDates(start, end);
@@ -135,16 +130,17 @@ export async function* streamCsvBars(
     `   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
   );
   console.log(`   - Current time: ${new Date().toString()}`);
-  console.log(`   - Start date object: ${startDate.toString()}`);
-  console.log(`   - End date object: ${endDate.toString()}`);
+  console.log(`   - Working with components (no timezone issues!):`);
+  console.log(
+    `   - Start: ${startComponents.dateKey} ${startComponents.timeKey}`
+  );
+  console.log(`   - End: ${endComponents.dateKey} ${endComponents.timeKey}`);
 
   console.log(
-    `🎯 Target time window: ${startTime} to ${endTime} (24-hour format PST)`
+    `🎯 Target time window: ${startComponents.timeKey} to ${endComponents.timeKey} (24-hour format PST)`
   );
   console.log(`📅 Valid trading dates: ${tradingDates.join(', ')}`);
   console.log(`🔍 DEBUG - Received params:`, params);
-  console.log(`🔍 DEBUG - Start: "${start}" → Time: ${startTime}`);
-  console.log(`🔍 DEBUG - End: "${end}" → Time: ${endTime}`);
 
   // 1) Validate files exist up-front
   for (const f of csvFiles) {
@@ -173,44 +169,52 @@ export async function* streamCsvBars(
 
       if (!timestamp) continue;
 
-      // Parse the bar timestamp using PST interpretation
-      let barDate: Date;
+      // Parse the bar timestamp into components
+      let barComponents: ReturnType<typeof parseTimestampToComponents>;
       try {
-        barDate = parsePSTTimestamp(timestamp);
+        barComponents = parseTimestampToComponents(timestamp);
       } catch (error) {
         console.error(`Error parsing bar timestamp: "${timestamp}"`, error);
         continue; // Skip this bar if we can't parse its timestamp
       }
 
-      // Check if this bar falls within our overall date range
-      if (barDate < startDate || barDate > endDate) {
+      // Check date range using numbers (no timezone issues!)
+      const barDateNum = componentsToDateNumber(
+        barComponents.year,
+        barComponents.month,
+        barComponents.day
+      );
+
+      if (barDateNum < startDateNum || barDateNum > endDateNum) {
         continue;
       }
 
-      // Extract date portion and check if it's a valid trading date
-      const barDateString = timestamp.split(' ')[0]; // "2025-07-20"
-      if (!tradingDateSet.has(barDateString)) {
+      // Check if it's a valid trading date
+      if (!tradingDateSet.has(barComponents.dateKey)) {
         // Skip non-trading days (weekends, holidays)
         continue;
       }
 
-      // Get bar time in 24-hour format for comparison
-      const barTime = extractTimeFromTimestamp(timestamp);
-
       // Debug first few comparisons
       if (debugCount < 3 && barsFromThisFile === 0) {
         console.log(`🔍 DEBUG - Bar timestamp: ${timestamp}`);
-        console.log(`🔍 DEBUG - Bar time (24h): ${barTime}`);
+        console.log(`🔍 DEBUG - Bar time (24h): ${barComponents.timeKey}`);
         console.log(
-          `🔍 DEBUG - Time comparison: ${barTime} >= ${startTime} && ${barTime} <= ${endTime} = ${
-            barTime >= startTime && barTime <= endTime
+          `🔍 DEBUG - Time comparison: ${barComponents.timeKey} >= ${
+            startComponents.timeKey
+          } && ${barComponents.timeKey} <= ${endComponents.timeKey} = ${
+            barComponents.timeKey >= startComponents.timeKey &&
+            barComponents.timeKey <= endComponents.timeKey
           }`
         );
         debugCount++;
       }
 
-      // Check if this bar falls within our daily time window
-      if (barTime >= startTime && barTime <= endTime) {
+      // Check if this bar falls within our daily time window (string comparison works!)
+      if (
+        barComponents.timeKey >= startComponents.timeKey &&
+        barComponents.timeKey <= endComponents.timeKey
+      ) {
         // Build complete bar with ALL available fields
         const bar: CsvBar = {
           // Required fields

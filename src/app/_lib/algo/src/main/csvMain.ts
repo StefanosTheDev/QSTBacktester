@@ -84,62 +84,6 @@ function getDateKey(timestamp: string): string {
   return `${month}/${day}/${year}`;
 }
 
-// Parse timestamp ensuring PST interpretation (same as readCSV.ts)
-function parsePSTTimestamp(timestamp: string): Date {
-  // Handle edge cases
-  if (!timestamp) {
-    throw new Error('Timestamp is undefined or empty');
-  }
-
-  // "2025-01-15 09:30:00 AM" → parse components
-  const parts = timestamp.split(' ');
-  if (parts.length !== 3) {
-    throw new Error(
-      `Invalid timestamp format: "${timestamp}". Expected "YYYY-MM-DD HH:MM:SS AM/PM"`
-    );
-  }
-
-  const [datePart, timePart, ampm] = parts;
-
-  if (!datePart || !timePart || !ampm) {
-    throw new Error(`Invalid timestamp components in: "${timestamp}"`);
-  }
-
-  const dateParts = datePart.split('-');
-  if (dateParts.length !== 3) {
-    throw new Error(`Invalid date format in timestamp: "${timestamp}"`);
-  }
-
-  const [year, month, day] = dateParts.map(Number);
-
-  const timeParts = timePart.split(':');
-  if (timeParts.length !== 3) {
-    throw new Error(`Invalid time format in timestamp: "${timestamp}"`);
-  }
-
-  let [hours] = timeParts.map(Number);
-  const [, minutes, seconds] = timeParts.map(Number);
-
-  // Validate numeric values
-  if (
-    isNaN(year) ||
-    isNaN(month) ||
-    isNaN(day) ||
-    isNaN(hours) ||
-    isNaN(minutes) ||
-    isNaN(seconds)
-  ) {
-    throw new Error(`Invalid numeric values in timestamp: "${timestamp}"`);
-  }
-
-  // Convert to 24-hour
-  if (ampm === 'PM' && hours !== 12) hours += 12;
-  if (ampm === 'AM' && hours === 12) hours = 0;
-
-  // IMPORTANT: Create date in LOCAL time, not UTC
-  return new Date(year, month - 1, day, hours, minutes, seconds);
-}
-
 export async function run(
   csvFiles: string[],
   formData: ApiParams
@@ -168,31 +112,10 @@ export async function run(
   logs.push(`   Method 1 ISO: ${method1.toISOString()}`);
   logs.push(`   Method 1 Hours: ${method1.getHours()}`);
 
-  // Method 2: Your parsePSTTimestamp function
-  try {
-    const method2 = parsePSTTimestamp(testTimestamp);
-    logs.push(`   Method 2 (parsePSTTimestamp): ${method2.toString()}`);
-    logs.push(`   Method 2 ISO: ${method2.toISOString()}`);
-    logs.push(`   Method 2 Hours: ${method2.getHours()}`);
-  } catch (e) {
-    logs.push(`   Method 2 ERROR: ${e}`);
-  }
-
   // Test with actual start/end parameters
   logs.push(`\n📅 ACTUAL PARAMETERS:`);
   logs.push(`   - Start param: "${formData.start}"`);
   logs.push(`   - End param: "${formData.end}"`);
-
-  try {
-    const startParsed = parsePSTTimestamp(formData.start);
-    const endParsed = parsePSTTimestamp(formData.end);
-    logs.push(`   - Start parsed: ${startParsed.toString()}`);
-    logs.push(`   - End parsed: ${endParsed.toString()}`);
-    logs.push(`   - Start ISO: ${startParsed.toISOString()}`);
-    logs.push(`   - End ISO: ${endParsed.toISOString()}`);
-  } catch (e) {
-    logs.push(`   - Parse ERROR: ${e}`);
-  }
 
   // Test getDateKey function
   logs.push(`\n🔑 DATE KEY TESTS:`);
