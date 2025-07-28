@@ -1,5 +1,5 @@
 // src/strategy/SignalGenerator.ts
-import { CsvBar, TrendlineResult } from './types';
+import { CsvBar, TrendlineResult } from '../types/types';
 
 export class SignalGenerator {
   validateSignal(

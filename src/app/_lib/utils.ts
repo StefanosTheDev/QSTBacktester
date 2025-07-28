@@ -1,5 +1,5 @@
 import { FormProp } from '../types/types';
-import { ApiParams } from './algo/src/main/types';
+import { ApiParams } from './algo/types/types';
 /**
  * Extended form parameters including ISO start/end strings.
  */

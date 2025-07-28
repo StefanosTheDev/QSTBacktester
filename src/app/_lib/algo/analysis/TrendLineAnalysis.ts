@@ -1,8 +1,7 @@
 // src/indicators/TrendlineAnalysis.ts
-import { TrendlineResult } from './types';
+import { TrendlineResult } from '../types/types';
 
 import { calculateLinearRegression } from './Calculations';
-
 function checkTrendLine(
   support: boolean,
   pivot: number,

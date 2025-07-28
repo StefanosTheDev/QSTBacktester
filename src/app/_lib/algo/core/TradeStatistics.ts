@@ -1,5 +1,5 @@
 // src/strategy/TradeStatistics.ts
-import { StrategyTrade } from './types';
+import { StrategyTrade } from '../types/types';
 
 export class TradeStatistics {
   private trades: StrategyTrade[] = [];

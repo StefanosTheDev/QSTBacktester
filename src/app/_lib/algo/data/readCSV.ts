@@ -2,11 +2,13 @@
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
-import { CsvBar } from './types';
-import { getTradingDates } from '../utils';
+import { CsvBar } from '../types/types';
 
-const BASE_DIR = path.join(process.cwd(), 'src/app/_lib/algo/src/csv_database');
-
+import { getTradingDates } from '../analysis/Calculations';
+const BASE_DIR = path.join(
+  process.cwd(),
+  'src/app/_lib/algo/data/csv_database'
+);
 // Helper to parse timestamp components without creating Date objects
 function parseTimestampToComponents(timestamp: string): {
   year: number;
