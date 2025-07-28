@@ -96,15 +96,6 @@ function extractTimeFromTimestamp(timestamp: string): string {
   )}:${seconds.padStart(2, '0')}`;
 }
 
-// New function to parse date only (ignoring time)
-function parseDateOnly(dateStr: string): Date {
-  // Extract just the date part: "2025-01-15" from "2025-01-15 09:30:00 AM"
-  const datePart = dateStr.split(' ')[0];
-  const [year, month, day] = datePart.split('-').map(Number);
-  // Create date at midnight local time
-  return new Date(year, month - 1, day, 0, 0, 0);
-}
-
 export async function* streamCsvBars(
   csvFiles: string[],
   start: string, // "2025-07-20 6:00:00 PM"
@@ -116,9 +107,19 @@ export async function* streamCsvBars(
     cvdLookBackBars?: number;
   }
 ): AsyncGenerator<CsvBar> {
-  // Parse the dates for comparison
-  const startDateOnly = parseDateOnly(start);
-  const endDateOnly = parseDateOnly(end);
+  // Parse start and end dates using the same function used in csvMain.ts
+  let startDate: Date;
+  let endDate: Date;
+
+  try {
+    startDate = parsePSTTimestamp(start);
+    endDate = parsePSTTimestamp(end);
+  } catch (error) {
+    console.error('Error parsing start/end dates:', error);
+    console.error('Start input:', start);
+    console.error('End input:', end);
+    throw new Error(`Failed to parse date parameters: ${error}`);
+  }
 
   // Extract times directly from the input strings (avoiding timezone issues)
   const startTime = extractTimeFromTimestamp(start);
@@ -163,11 +164,17 @@ export async function* streamCsvBars(
 
       if (!timestamp) continue;
 
-      // Parse just the date portion for date range check
-      const barDateOnly = parseDateOnly(timestamp);
+      // Parse the bar timestamp using PST interpretation
+      let barDate: Date;
+      try {
+        barDate = parsePSTTimestamp(timestamp);
+      } catch (error) {
+        console.error(`Error parsing bar timestamp: "${timestamp}"`, error);
+        continue; // Skip this bar if we can't parse its timestamp
+      }
 
       // Check if this bar falls within our overall date range
-      if (barDateOnly < startDateOnly || barDateOnly > endDateOnly) {
+      if (barDate < startDate || barDate > endDate) {
         continue;
       }
 
