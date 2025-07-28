@@ -9,7 +9,8 @@ const BASE_DIR = path.join(
   process.cwd(),
   'src/app/_lib/algo/data/csv_database'
 );
-// Helper to parse timestamp components without creating Date objects
+// src/strategy/readCSV.ts - Replace the parseTimestampToComponents function
+
 function parseTimestampToComponents(timestamp: string): {
   year: number;
   month: number;
@@ -23,62 +24,31 @@ function parseTimestampToComponents(timestamp: string): {
   // "2025-01-15 09:30:00 AM" → parse components
   const parts = timestamp.split(' ');
   if (parts.length !== 3) {
-    throw new Error(
-      `Invalid timestamp format: "${timestamp}". Expected "YYYY-MM-DD HH:MM:SS AM/PM"`
-    );
+    throw new Error(`Invalid timestamp format: "${timestamp}"`);
   }
 
   const [datePart, timePart, ampm] = parts;
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hours, minutes, seconds] = timePart.split(':').map(Number);
 
-  if (!datePart || !timePart || !ampm) {
-    throw new Error(`Invalid timestamp components in: "${timestamp}"`);
-  }
-
-  const dateParts = datePart.split('-');
-  if (dateParts.length !== 3) {
-    throw new Error(`Invalid date format in timestamp: "${timestamp}"`);
-  }
-
-  const [year, month, day] = dateParts.map(Number);
-
-  const timeParts = timePart.split(':');
-  if (timeParts.length !== 3) {
-    throw new Error(`Invalid time format in timestamp: "${timestamp}"`);
-  }
-
-  let [hours] = timeParts.map(Number);
-  const [, minutes, seconds] = timeParts.map(Number);
-
-  // Validate numeric values
-  if (
-    isNaN(year) ||
-    isNaN(month) ||
-    isNaN(day) ||
-    isNaN(hours) ||
-    isNaN(minutes) ||
-    isNaN(seconds)
-  ) {
-    throw new Error(`Invalid numeric values in timestamp: "${timestamp}"`);
-  }
-
-  // Convert to 24-hour
-  if (ampm === 'PM' && hours !== 12) hours += 12;
-  if (ampm === 'AM' && hours === 12) hours = 0;
+  // Convert to 24-hour WITHOUT timezone interpretation
+  let hour24 = hours;
+  if (ampm === 'PM' && hours !== 12) hour24 += 12;
+  if (ampm === 'AM' && hours === 12) hour24 = 0;
 
   // Create standardized keys for comparison
   const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(
     day
   ).padStart(2, '0')}`;
-  const timeKey = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(
-    2,
-    '0'
-  )}:${String(seconds).padStart(2, '0')}`;
+  const timeKey = `${String(hour24).padStart(2, '0')}:${String(
+    minutes
+  ).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
   return {
     year,
     month,
     day,
-    hour24: hours,
+    hour24,
     minute: minutes,
     second: seconds,
     dateKey,
