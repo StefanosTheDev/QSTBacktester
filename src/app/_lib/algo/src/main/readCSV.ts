@@ -1,20 +1,20 @@
-// src/strategy/readCSV.ts - FIXED VERSION WITH PST HANDLING
+// src/strategy/readCSV.ts - FIXED VERSION WITH TIMEZONE-AGNOSTIC PARSING
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
 import { CsvBar } from './types';
-import { getTradingDates } from '../utils'; // Import your trading dates function
+import { getTradingDates } from '../utils';
 
 const BASE_DIR = path.join(process.cwd(), 'src/app/_lib/algo/src/csv_database');
 
-// Parse timestamp ensuring PST interpretation
+// Parse timestamp ensuring consistent interpretation regardless of server timezone
 function parsePSTTimestamp(timestamp: string): Date {
   // Handle edge cases
   if (!timestamp) {
     throw new Error('Timestamp is undefined or empty');
   }
 
-  // "2025-01-15 09:30:00 AM" → force PST interpretation
+  // "2025-01-15 09:30:00 AM" → parse components
   const parts = timestamp.split(' ');
   if (parts.length !== 3) {
     throw new Error(
@@ -59,10 +59,10 @@ function parsePSTTimestamp(timestamp: string): Date {
   if (ampm === 'PM' && hours !== 12) hours += 12;
   if (ampm === 'AM' && hours === 12) hours = 0;
 
-  // Create date assuming PST (UTC-8), but during DST it's PDT (UTC-7)
-  // For consistency, we'll use UTC-8 year-round since your CSVs are labeled PST
-  const utcDate = Date.UTC(year, month - 1, day, hours + 8, minutes, seconds);
-  return new Date(utcDate);
+  // IMPORTANT: Create date in LOCAL time, not UTC
+  // Since we're comparing times as strings later, we need consistent behavior
+  // This creates the date as if the server were in PST
+  return new Date(year, month - 1, day, hours, minutes, seconds);
 }
 
 // Extract time in 24-hour format directly from timestamp string
@@ -96,31 +96,29 @@ function extractTimeFromTimestamp(timestamp: string): string {
   )}:${seconds.padStart(2, '0')}`;
 }
 
+// New function to parse date only (ignoring time)
+function parseDateOnly(dateStr: string): Date {
+  // Extract just the date part: "2025-01-15" from "2025-01-15 09:30:00 AM"
+  const datePart = dateStr.split(' ')[0];
+  const [year, month, day] = datePart.split('-').map(Number);
+  // Create date at midnight local time
+  return new Date(year, month - 1, day, 0, 0, 0);
+}
+
 export async function* streamCsvBars(
   csvFiles: string[],
   start: string, // "2025-07-20 6:00:00 PM"
   end: string, // "2025-07-22 6:10:00 PM"
   params?: {
-    // Add optional params for selective filtering
     emaMovingAverage?: number;
     adxPeriod?: number;
     adxThreshold?: number;
     cvdLookBackBars?: number;
   }
 ): AsyncGenerator<CsvBar> {
-  // Parse the start and end dates using PST interpretation
-  let startDate: Date;
-  let endDate: Date;
-
-  try {
-    startDate = parsePSTTimestamp(start);
-    endDate = parsePSTTimestamp(end);
-  } catch (error) {
-    console.error('Error parsing start/end dates:', error);
-    console.error('Start input:', start);
-    console.error('End input:', end);
-    throw new Error(`Failed to parse date parameters: ${error}`);
-  }
+  // Parse the dates for comparison
+  const startDateOnly = parseDateOnly(start);
+  const endDateOnly = parseDateOnly(end);
 
   // Extract times directly from the input strings (avoiding timezone issues)
   const startTime = extractTimeFromTimestamp(start);
@@ -165,17 +163,11 @@ export async function* streamCsvBars(
 
       if (!timestamp) continue;
 
-      // Parse the bar timestamp using PST interpretation
-      let barDate: Date;
-      try {
-        barDate = parsePSTTimestamp(timestamp);
-      } catch (error) {
-        console.error(`Error parsing bar timestamp: "${timestamp}"`, error);
-        continue; // Skip this bar if we can't parse its timestamp
-      }
+      // Parse just the date portion for date range check
+      const barDateOnly = parseDateOnly(timestamp);
 
       // Check if this bar falls within our overall date range
-      if (barDate < startDate || barDate > endDate) {
+      if (barDateOnly < startDateOnly || barDateOnly > endDateOnly) {
         continue;
       }
 
