@@ -288,7 +288,6 @@ export class TradeExecutor {
       // Log the calculation
       const ticks = Math.round(profitPoints / FUTURES_CONSTANTS.TICK_SIZE);
       const contracts = this.profitCalculator['contractSize'];
-      const gross = ticks * FUTURES_CONSTANTS.TICK_VALUE * contracts;
       const commission = FUTURES_CONSTANTS.COMMISSION_PER_CONTRACT * contracts;
       console.log(
         `   Calculation: ${ticks} ticks × $12.50 × ${contracts} contracts - $${commission} = $${totalProfit.toFixed(

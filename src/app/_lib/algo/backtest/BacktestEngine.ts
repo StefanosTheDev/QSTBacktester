@@ -10,6 +10,7 @@ import { TradeValidator } from '../validation/TradeValidator';
 import { BarProcessor } from './BarProcessor';
 import { BacktestResult, IntradayStats, PendingSignal } from './BacktestTypes';
 import { TradeRecord } from '../types/types';
+import { ExitResult } from '../trading/PositionTypes';
 export class BacktestEngine {
   private logger: BacktestLogger;
   private positionManager: PositionManager;
@@ -68,9 +69,6 @@ export class BacktestEngine {
     isFirstBar: boolean
   ): void {
     if (isFirstBar) return;
-
-    const barDay = DateTimeUtils.getDateKey(bar.timestamp);
-    this.updateDayTracking(barDay, bar.timestamp);
 
     // Check for gaps
     if (prevBar && this.checkGaps(bar, prevBar)) {
@@ -143,7 +141,7 @@ export class BacktestEngine {
     }
   }
 
-  private handleExit(bar: CsvBar, exitResult: any): void {
+  private handleExit(bar: CsvBar, exitResult: ExitResult): void {
     const exitDateStr = DateTimeUtils.getDateKey(bar.timestamp);
     const exitTimeStr = DateTimeUtils.formatForLog(bar.timestamp);
 
@@ -154,7 +152,6 @@ export class BacktestEngine {
     );
 
     // Update intraday tracking
-    this.updateIntradayStats(bar.timestamp);
 
     // Log exit
     const actualPoints = exitResult.tradeRecord
@@ -307,10 +304,6 @@ export class BacktestEngine {
       intradayStats: this.intradayStats,
     };
   }
-  // Helper methods
-  private updateDayTracking(barDay: string, timestamp: string): void {
-    // Implementation for day tracking update
-  }
 
   private handleDailyLimitReached(bar: CsvBar): void {
     if (this.positionManager.hasPosition()) {
@@ -334,10 +327,6 @@ export class BacktestEngine {
     if (exitResult.exited) {
       this.handleExit(bar, exitResult);
     }
-  }
-
-  private updateIntradayStats(timestamp: string): void {
-    // Implementation for intraday stats update
   }
 
   private logConfiguration(): void {

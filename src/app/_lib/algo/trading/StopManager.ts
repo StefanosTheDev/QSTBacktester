@@ -1,9 +1,5 @@
 // src/strategy/trading/StopManager.ts
-import {
-  ExtendedPosition,
-  TrailingStopConfig,
-  FUTURES_CONSTANTS,
-} from './PositionTypes';
+import { ExtendedPosition, TrailingStopConfig } from './PositionTypes';
 import { CsvBar } from '../types/types';
 import { ProfitCalculator } from './ProfitCalculator';
 
