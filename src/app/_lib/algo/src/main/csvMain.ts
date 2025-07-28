@@ -84,14 +84,70 @@ function getDateKey(timestamp: string): string {
   return `${month}/${day}/${year}`;
 }
 
+// Parse timestamp ensuring PST interpretation (same as readCSV.ts)
+function parsePSTTimestamp(timestamp: string): Date {
+  // Handle edge cases
+  if (!timestamp) {
+    throw new Error('Timestamp is undefined or empty');
+  }
+
+  // "2025-01-15 09:30:00 AM" → parse components
+  const parts = timestamp.split(' ');
+  if (parts.length !== 3) {
+    throw new Error(
+      `Invalid timestamp format: "${timestamp}". Expected "YYYY-MM-DD HH:MM:SS AM/PM"`
+    );
+  }
+
+  const [datePart, timePart, ampm] = parts;
+
+  if (!datePart || !timePart || !ampm) {
+    throw new Error(`Invalid timestamp components in: "${timestamp}"`);
+  }
+
+  const dateParts = datePart.split('-');
+  if (dateParts.length !== 3) {
+    throw new Error(`Invalid date format in timestamp: "${timestamp}"`);
+  }
+
+  const [year, month, day] = dateParts.map(Number);
+
+  const timeParts = timePart.split(':');
+  if (timeParts.length !== 3) {
+    throw new Error(`Invalid time format in timestamp: "${timestamp}"`);
+  }
+
+  let [hours] = timeParts.map(Number);
+  const [, minutes, seconds] = timeParts.map(Number);
+
+  // Validate numeric values
+  if (
+    isNaN(year) ||
+    isNaN(month) ||
+    isNaN(day) ||
+    isNaN(hours) ||
+    isNaN(minutes) ||
+    isNaN(seconds)
+  ) {
+    throw new Error(`Invalid numeric values in timestamp: "${timestamp}"`);
+  }
+
+  // Convert to 24-hour
+  if (ampm === 'PM' && hours !== 12) hours += 12;
+  if (ampm === 'AM' && hours === 12) hours = 0;
+
+  // IMPORTANT: Create date in LOCAL time, not UTC
+  return new Date(year, month - 1, day, hours, minutes, seconds);
+}
+
 export async function run(
   csvFiles: string[],
   formData: ApiParams
 ): Promise<BacktestResult> {
   const logs: string[] = [];
 
-  // TIMEZONE DEBUGGING
-  logs.push(`\n🌍 TIMEZONE DIAGNOSTICS:`);
+  // ENHANCED TIMEZONE DEBUGGING
+  logs.push(`\n🌍 ENHANCED TIMEZONE DIAGNOSTICS:`);
   logs.push(
     `   - Server Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
   );
@@ -99,37 +155,55 @@ export async function run(
   logs.push(
     `   - Server UTC Offset: ${new Date().getTimezoneOffset()} minutes`
   );
+  logs.push(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+  logs.push(`   - TZ env var: ${process.env.TZ || 'not set'}`);
 
-  // Test date parsing
-  const testDate = '1/2/2025';
-  const testTime = '09:30';
-  const testDateTime = `${testDate} ${testTime}:00 AM`;
-
-  const parsed1 = new Date(testDate);
-  const parsed2 = new Date(testDateTime);
-  const parsed3 = new Date(`2025-01-02T09:30:00`);
-
-  logs.push(`\n   Date Parsing Tests:`);
-  logs.push(`   - Parse "${testDate}": ${parsed1.toString()}`);
-  logs.push(`   - Parse "${testDateTime}": ${parsed2.toString()}`);
-  logs.push(`   - Parse ISO "2025-01-02T09:30:00": ${parsed3.toString()}`);
-
-  // Test specific timestamp parsing
+  // Test date parsing with your actual input format
   const testTimestamp = '2025-01-15 09:30:00 AM';
   logs.push(`\n🔍 PARSING TEST for: "${testTimestamp}"`);
 
-  const parsedTest = new Date(testTimestamp);
-  logs.push(`   Direct parse: ${parsedTest.toString()}`);
-  logs.push(`   ISO String: ${parsedTest.toISOString()}`);
+  // Method 1: Direct Date constructor
+  const method1 = new Date(testTimestamp);
+  logs.push(`   Method 1 (new Date()): ${method1.toString()}`);
+  logs.push(`   Method 1 ISO: ${method1.toISOString()}`);
+  logs.push(`   Method 1 Hours: ${method1.getHours()}`);
+
+  // Method 2: Your parsePSTTimestamp function
+  try {
+    const method2 = parsePSTTimestamp(testTimestamp);
+    logs.push(`   Method 2 (parsePSTTimestamp): ${method2.toString()}`);
+    logs.push(`   Method 2 ISO: ${method2.toISOString()}`);
+    logs.push(`   Method 2 Hours: ${method2.getHours()}`);
+  } catch (e) {
+    logs.push(`   Method 2 ERROR: ${e}`);
+  }
+
+  // Test with actual start/end parameters
+  logs.push(`\n📅 ACTUAL PARAMETERS:`);
+  logs.push(`   - Start param: "${formData.start}"`);
+  logs.push(`   - End param: "${formData.end}"`);
+
+  try {
+    const startParsed = parsePSTTimestamp(formData.start);
+    const endParsed = parsePSTTimestamp(formData.end);
+    logs.push(`   - Start parsed: ${startParsed.toString()}`);
+    logs.push(`   - End parsed: ${endParsed.toString()}`);
+    logs.push(`   - Start ISO: ${startParsed.toISOString()}`);
+    logs.push(`   - End ISO: ${endParsed.toISOString()}`);
+  } catch (e) {
+    logs.push(`   - Parse ERROR: ${e}`);
+  }
+
+  // Test getDateKey function
+  logs.push(`\n🔑 DATE KEY TESTS:`);
+  const testDates = ['2025-01-15 09:30:00 AM', '01/15/2025', '2025-01-15'];
+  testDates.forEach((td) => {
+    logs.push(`   - getDateKey("${td}") = "${getDateKey(td)}"`);
+  });
+
   logs.push(
-    `   Hours: ${parsedTest.getHours()}, UTC Hours: ${parsedTest.getUTCHours()}`
+    `\n🔍 DEBUG - Environment: ${process.env.NODE_ENV || 'development'}`
   );
-  logs.push(`   DateKey result: ${getDateKey(testTimestamp)}`);
-
-  logs.push(`\n`);
-
-  // DEBUG: Environment info
-  logs.push(`🔍 DEBUG - Environment: ${process.env.NODE_ENV || 'development'}`);
   logs.push(`🔍 DEBUG - Node Version: ${process.version}`);
   logs.push(`🔍 DEBUG - Start Param: ${formData.start}`);
   logs.push(`🔍 DEBUG - End Param: ${formData.end}`);
@@ -202,6 +276,10 @@ export async function run(
   let firstBarLogged = false;
   let lastBarTimestamp = '';
 
+  // Bar tracking for debugging
+  let barsInTimeWindow = 0;
+  let barsProcessed = 0;
+
   for await (const bar of streamCsvBars(
     csvFiles,
     formData.start,
@@ -209,6 +287,7 @@ export async function run(
     filterParams
   )) {
     count++;
+    barsInTimeWindow++;
 
     // DEBUG: Log first 3 bars
     if (count <= 3) {
@@ -561,6 +640,7 @@ export async function run(
     }
 
     prevBar = bar;
+    barsProcessed++;
   }
 
   // Save final day's stats
@@ -578,6 +658,12 @@ export async function run(
   logs.push(`🔍 DEBUG - Last Bar Timestamp: ${lastBarTimestamp}`);
   logs.push(`🔍 DEBUG - Last Bar DateKey: ${getDateKey(lastBarTimestamp)}`);
   logs.push(`🔍 DEBUG - Total Bars Processed: ${count}`);
+
+  // Bar statistics
+  logs.push(`\n📊 BAR STATISTICS:`);
+  logs.push(`   - Total bars in time window: ${barsInTimeWindow}`);
+  logs.push(`   - Bars processed after filters: ${barsProcessed}`);
+  logs.push(`   - Bars skipped: ${count - barsProcessed}`);
 
   // Get final statistics
   const baseStats = positionManager.getStatistics().getStatistics();

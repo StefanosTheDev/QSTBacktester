@@ -129,6 +129,15 @@ export async function* streamCsvBars(
   const tradingDates = getTradingDates(start, end);
   const tradingDateSet = new Set(tradingDates);
 
+  // Enhanced debugging
+  console.log(`\n🔍 READCSV DEBUG - Environment:`);
+  console.log(
+    `   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
+  );
+  console.log(`   - Current time: ${new Date().toString()}`);
+  console.log(`   - Start date object: ${startDate.toString()}`);
+  console.log(`   - End date object: ${endDate.toString()}`);
+
   console.log(
     `🎯 Target time window: ${startTime} to ${endTime} (24-hour format PST)`
   );
