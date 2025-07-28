@@ -1,4 +1,4 @@
-// src/strategy/TradeStatistics.ts
+// src/core/TradeStatistics.ts
 import { StrategyTrade } from '../types/types';
 
 export class TradeStatistics {
@@ -156,6 +156,48 @@ export class TradeStatistics {
     return { avgWin, avgLoss, avgWinPoints, avgLossPoints };
   }
 
+  getLongShortStatistics(): {
+    longTrades: number;
+    longWins: number;
+    longLosses: number;
+    longWinRate: number;
+    shortTrades: number;
+    shortWins: number;
+    shortLosses: number;
+    shortWinRate: number;
+    longAvgProfit: number;
+    shortAvgProfit: number;
+  } {
+    const longTrades = this.trades.filter((t) => t.type === 'bullish');
+    const shortTrades = this.trades.filter((t) => t.type === 'bearish');
+
+    const longWins = longTrades.filter((t) => t.profit > 0).length;
+    const longLosses = longTrades.filter((t) => t.profit <= 0).length;
+
+    const shortWins = shortTrades.filter((t) => t.profit > 0).length;
+    const shortLosses = shortTrades.filter((t) => t.profit <= 0).length;
+
+    const longTotalProfit = longTrades.reduce((sum, t) => sum + t.profit, 0);
+    const shortTotalProfit = shortTrades.reduce((sum, t) => sum + t.profit, 0);
+
+    return {
+      longTrades: longTrades.length,
+      longWins,
+      longLosses,
+      longWinRate:
+        longTrades.length > 0 ? (longWins / longTrades.length) * 100 : 0,
+      shortTrades: shortTrades.length,
+      shortWins,
+      shortLosses,
+      shortWinRate:
+        shortTrades.length > 0 ? (shortWins / shortTrades.length) * 100 : 0,
+      longAvgProfit:
+        longTrades.length > 0 ? longTotalProfit / longTrades.length : 0,
+      shortAvgProfit:
+        shortTrades.length > 0 ? shortTotalProfit / shortTrades.length : 0,
+    };
+  }
+
   getStatistics() {
     const stats = {
       totalTrades: this.getTradeCount(),
@@ -176,6 +218,9 @@ export class TradeStatistics {
     // Get average win/loss analysis
     const avgWinLoss = this.getAverageWinLoss();
 
+    // Get long/short statistics
+    const longShortStats = this.getLongShortStatistics();
+
     return {
       ...stats,
       profitFactor:
@@ -186,6 +231,7 @@ export class TradeStatistics {
           : 0,
       totalProfit: this.trades.reduce((sum, t) => sum + t.profit, 0),
       avgWinLoss: avgWinLoss,
+      longShortStats: longShortStats,
     };
   }
 

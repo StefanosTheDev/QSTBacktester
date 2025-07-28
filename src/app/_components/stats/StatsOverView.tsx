@@ -17,6 +17,18 @@ interface StatsOverviewProps {
     totalTradingDays?: number;
     actualTotalProfit?: number;
     actualDailyPnL?: Record<string, number>;
+    longShortStats?: {
+      longTrades: number;
+      longWins: number;
+      longLosses: number;
+      longWinRate: number;
+      shortTrades: number;
+      shortWins: number;
+      shortLosses: number;
+      shortWinRate: number;
+      longAvgProfit: number;
+      shortAvgProfit: number;
+    };
   };
   count: number;
 }
@@ -107,6 +119,122 @@ export default function StatsOverview({
           </div>
         </div>
       </div>
+
+      {/* Long vs Short Analysis */}
+      {statistics.longShortStats && (
+        <div className="bg-gradient-to-r from-blue-50 to-orange-50 p-4 rounded-lg border border-gray-200">
+          <h4 className="text-lg font-semibold mb-3 text-gray-800">
+            Long vs Short Performance
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            {/* Long Stats */}
+            <div className="bg-blue-100 p-3 rounded">
+              <h5 className="font-medium text-blue-800 mb-2">LONG Trades</h5>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Total:</span>
+                  <span className="font-medium">
+                    {statistics.longShortStats.longTrades}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Wins:</span>
+                  <span className="font-medium text-green-600">
+                    {statistics.longShortStats.longWins} (
+                    {statistics.longShortStats.longWinRate.toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Losses:</span>
+                  <span className="font-medium text-red-600">
+                    {statistics.longShortStats.longLosses} (
+                    {(100 - statistics.longShortStats.longWinRate).toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Avg P/L:</span>
+                  <span
+                    className={`font-medium ${
+                      statistics.longShortStats.longAvgProfit >= 0
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                    }`}
+                  >
+                    {formatCurrency(statistics.longShortStats.longAvgProfit)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Short Stats */}
+            <div className="bg-orange-100 p-3 rounded">
+              <h5 className="font-medium text-orange-800 mb-2">SHORT Trades</h5>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Total:</span>
+                  <span className="font-medium">
+                    {statistics.longShortStats.shortTrades}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Wins:</span>
+                  <span className="font-medium text-green-600">
+                    {statistics.longShortStats.shortWins} (
+                    {statistics.longShortStats.shortWinRate.toFixed(1)}%)
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Losses:</span>
+                  <span className="font-medium text-red-600">
+                    {statistics.longShortStats.shortLosses} (
+                    {(100 - statistics.longShortStats.shortWinRate).toFixed(1)}
+                    %)
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Avg P/L:</span>
+                  <span
+                    className={`font-medium ${
+                      statistics.longShortStats.shortAvgProfit >= 0
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                    }`}
+                  >
+                    {formatCurrency(statistics.longShortStats.shortAvgProfit)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary Comparison */}
+          <div className="mt-3 pt-3 border-t border-gray-300">
+            <div className="text-sm text-gray-600">
+              {statistics.longShortStats.longWinRate >
+              statistics.longShortStats.shortWinRate ? (
+                <p className="font-medium">
+                  📊 Long trades perform better with{' '}
+                  {statistics.longShortStats.longWinRate.toFixed(1)}% win rate
+                  vs {statistics.longShortStats.shortWinRate.toFixed(1)}% for
+                  shorts
+                </p>
+              ) : statistics.longShortStats.shortWinRate >
+                statistics.longShortStats.longWinRate ? (
+                <p className="font-medium">
+                  📊 Short trades perform better with{' '}
+                  {statistics.longShortStats.shortWinRate.toFixed(1)}% win rate
+                  vs {statistics.longShortStats.longWinRate.toFixed(1)}% for
+                  longs
+                </p>
+              ) : (
+                <p className="font-medium">
+                  📊 Long and short trades have similar performance
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-2 gap-4">

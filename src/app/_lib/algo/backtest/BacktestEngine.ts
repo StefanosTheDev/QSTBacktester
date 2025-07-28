@@ -279,7 +279,7 @@ export class BacktestEngine {
 
     validationLogs.forEach((log) => this.logger.log(log));
 
-    // Create final statistics
+    // Create final statistics - baseStats now includes longShortStats
     const statistics = {
       ...baseStats,
       totalProfit: dailyLimitStats.totalActualPnL,
@@ -307,7 +307,6 @@ export class BacktestEngine {
       intradayStats: this.intradayStats,
     };
   }
-
   // Helper methods
   private updateDayTracking(barDay: string, timestamp: string): void {
     // Implementation for day tracking update

@@ -26,6 +26,18 @@ export interface BacktestResult {
     totalTradingDays?: number;
     actualTotalProfit?: number;
     actualDailyPnL?: Record<string, number>;
+    longShortStats?: {
+      longTrades: number;
+      longWins: number;
+      longLosses: number;
+      longWinRate: number;
+      shortTrades: number;
+      shortWins: number;
+      shortLosses: number;
+      shortWinRate: number;
+      longAvgProfit: number;
+      shortAvgProfit: number;
+    };
   };
   trades: TradeRecord[];
   intradayStats?: Record<string, IntradayStats>;

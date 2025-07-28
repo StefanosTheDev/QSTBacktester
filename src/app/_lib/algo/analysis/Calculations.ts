@@ -1,3 +1,4 @@
+// Calculations.ts
 export function calculateLinearRegression(y: number[]): {
   slope: number;
   residuals: number[];
