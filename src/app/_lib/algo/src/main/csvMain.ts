@@ -5,6 +5,7 @@ import { SignalGenerator } from './SignalGenerator';
 import { fitTrendlinesWindow } from './TrendLineAnalysis';
 import { DailyLimitManager } from './DailyLimitManager';
 import { streamCsvBars } from './readCSV';
+process.env.TZ = 'America/Los_Angeles';
 
 export interface BacktestResult {
   count: number;
