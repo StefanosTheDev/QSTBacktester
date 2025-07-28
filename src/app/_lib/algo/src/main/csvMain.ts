@@ -7,7 +7,7 @@ import { DailyLimitManager } from './DailyLimitManager';
 import { streamCsvBars } from './readCSV';
 import { DateTime } from 'luxon';
 
-// Fallback timezone override
+// Fallback timezone override // MARKER PUSH FOR FIXED TIMEZONE
 if (process.env.TZ !== 'America/Los_Angeles') {
   process.env.TZ = 'America/Los_Angeles';
   console.warn('TZ overridden to America/Los_Angeles');
