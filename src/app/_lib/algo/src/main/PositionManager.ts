@@ -1,4 +1,4 @@
-// src/strategy/PositionManager.ts - With Trailing Stop Feature
+// src/strategy/PositionManager.ts - With Trailing Stop Feature and Timezone Fix
 import { CsvBar, Position, StrategyTrade, TradeRecord } from './types';
 import { TradeStatistics } from './TradeStatistics';
 
@@ -13,6 +13,72 @@ interface ExtendedPosition extends Position {
   highestProfit: number;
   stopMovedToBreakeven: boolean;
   isTrailing: boolean;
+}
+
+// Helper to convert PST timestamp to EST display without timezone issues
+function convertPSTtoESTDisplay(timestamp: string): {
+  date: string;
+  time: string;
+} {
+  // Parse the PST timestamp components
+  const parts = timestamp.split(' ');
+  if (parts.length !== 3) {
+    return { date: 'Invalid', time: 'Invalid' };
+  }
+
+  const [datePart, timePart, ampm] = parts;
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute, second] = timePart.split(':').map(Number);
+
+  // Convert to 24-hour format
+  let hour24 = hour;
+  if (ampm === 'PM' && hour !== 12) hour24 += 12;
+  if (ampm === 'AM' && hour === 12) hour24 = 0;
+
+  // Add 3 hours for PST to EST conversion
+  let estHour = hour24 + 3;
+  let estDay = day;
+  let estMonth = month;
+  let estYear = year;
+
+  // Handle day rollover
+  if (estHour >= 24) {
+    estHour -= 24;
+    estDay++;
+
+    // Handle month rollover
+    const daysInMonth = new Date(year, month, 0).getDate();
+    if (estDay > daysInMonth) {
+      estDay = 1;
+      estMonth++;
+
+      // Handle year rollover
+      if (estMonth > 12) {
+        estMonth = 1;
+        estYear++;
+      }
+    }
+  }
+
+  // Format the date as MM/DD/YYYY
+  const dateStr = `${estMonth.toString().padStart(2, '0')}/${estDay
+    .toString()
+    .padStart(2, '0')}/${estYear}`;
+
+  // Format the time as HH:MM:SS AM/PM
+  let displayHour = estHour;
+  let displayAmPm = 'AM';
+  if (estHour >= 12) {
+    displayAmPm = 'PM';
+    if (estHour > 12) displayHour = estHour - 12;
+  }
+  if (displayHour === 0) displayHour = 12;
+
+  const timeStr = `${displayHour.toString().padStart(2, '0')}:${minute
+    .toString()
+    .padStart(2, '0')}:${second.toString().padStart(2, '0')} ${displayAmPm}`;
+
+  return { date: dateStr, time: timeStr };
 }
 
 export class PositionManager {
@@ -88,10 +154,6 @@ export class PositionManager {
   hasPosition(): boolean {
     return this.position !== null;
   }
-
-  // In PositionManager.ts - Update the checkExit method with slippage protection
-
-  // In PositionManager.ts - Update the checkExit method with slippage protection
 
   checkExit(bar: CsvBar): {
     exited: boolean;
@@ -273,6 +335,7 @@ export class PositionManager {
 
     return { exited: false };
   }
+
   private updateTrailingStop(bar: CsvBar): number {
     if (!this.position) {
       throw new Error('updateTrailingStop called without an active position');
@@ -393,28 +456,9 @@ export class PositionManager {
   ): TradeRecord {
     if (!this.position) throw new Error('No position to create trade record');
 
-    const entryDateTime = new Date(this.position.timestamp);
-    const exitDateTime = new Date(exitBar.timestamp);
-
-    // Convert to Eastern Time for display
-    const entryDateET = entryDateTime.toLocaleDateString('en-US', {
-      timeZone: 'America/New_York',
-    });
-    const entryTimeET = entryDateTime.toLocaleTimeString('en-US', {
-      timeZone: 'America/New_York',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-    const exitDateET = exitDateTime.toLocaleDateString('en-US', {
-      timeZone: 'America/New_York',
-    });
-    const exitTimeET = exitDateTime.toLocaleTimeString('en-US', {
-      timeZone: 'America/New_York',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    // Convert PST timestamps to EST for display
+    const entryEST = convertPSTtoESTDisplay(this.position.timestamp);
+    const exitEST = convertPSTtoESTDisplay(exitBar.timestamp);
 
     const profitPoints =
       this.position.type === 'bullish'
@@ -425,18 +469,17 @@ export class PositionManager {
       (profitPoints / this.TICK_SIZE) * this.TICK_VALUE * this.contractSize;
     const commission = this.COMMISSION_PER_CONTRACT * this.contractSize;
 
-    // FIX: Use the configured stop/target values, not the calculated distances
     return {
-      entryDate: entryDateET,
-      entryTime: entryTimeET,
+      entryDate: entryEST.date,
+      entryTime: entryEST.time,
       entryPrice: this.position.entryPrice,
-      exitDate: exitDateET,
-      exitTime: exitTimeET,
+      exitDate: exitEST.date,
+      exitTime: exitEST.time,
       exitPrice: exitPrice,
       type: this.position.type === 'bullish' ? 'LONG' : 'SHORT',
       contracts: this.contractSize,
-      stopLoss: this.stopLoss, // Use the configured value
-      takeProfit: this.takeProfit, // Use the configured value
+      stopLoss: this.stopLoss,
+      takeProfit: this.takeProfit,
       exitReason: exitReason,
       profitLoss: grossProfit,
       commission: commission,
