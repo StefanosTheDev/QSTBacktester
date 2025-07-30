@@ -12,6 +12,8 @@ interface SettingsDisplayProps {
     candleType: string;
     cvdLookBackBars?: number;
     emaMovingAverage?: number;
+    smaFilter?: number;
+    useVWAP?: boolean;
     adxThreshold?: number;
     adxPeriod?: number;
     contractSize: number;
@@ -19,6 +21,9 @@ interface SettingsDisplayProps {
     takeProfit: number;
     maxDailyLoss?: number;
     maxDailyProfit?: number;
+    useTrailingStop?: boolean;
+    breakevenTrigger?: number;
+    trailDistance?: number;
   };
 }
 
@@ -33,6 +38,14 @@ export default function StatsSettingsDisplay({
       year: 'numeric',
     });
   };
+
+  // Count active filters
+  const activeFilters = [
+    settings.emaMovingAverage && settings.emaMovingAverage > 0,
+    settings.smaFilter && settings.smaFilter > 0,
+    settings.useVWAP,
+    settings.adxThreshold && settings.adxThreshold > 0,
+  ].filter(Boolean).length;
 
   return (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
@@ -115,38 +128,69 @@ export default function StatsSettingsDisplay({
           </div>
         </div>
 
-        {/* Indicators */}
+        {/* Indicators - UPDATED */}
         <div className="bg-white p-4 rounded-lg">
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Indicators
+            Indicators ({activeFilters} active)
           </h4>
           <div className="space-y-1 text-sm">
-            {settings.emaMovingAverage ? (
-              <div>
-                <span className="text-gray-600">EMA:</span>{' '}
-                <span className="font-medium">
-                  {settings.emaMovingAverage} period
-                </span>
-              </div>
-            ) : (
-              <div className="text-gray-400">No EMA</div>
-            )}
-            {settings.adxPeriod ? (
-              <>
-                <div>
-                  <span className="text-gray-600">ADX Period:</span>{' '}
-                  <span className="font-medium">{settings.adxPeriod}</span>
-                </div>
-                {settings.adxThreshold && (
-                  <div>
-                    <span className="text-gray-600">ADX Threshold:</span>{' '}
-                    <span className="font-medium">{settings.adxThreshold}</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-gray-400">No ADX</div>
-            )}
+            {/* EMA */}
+            <div
+              className={
+                settings.emaMovingAverage && settings.emaMovingAverage > 0
+                  ? ''
+                  : 'opacity-50'
+              }
+            >
+              <span className="text-gray-600">EMA:</span>{' '}
+              <span className="font-medium">
+                {settings.emaMovingAverage && settings.emaMovingAverage > 0
+                  ? `${settings.emaMovingAverage} period`
+                  : 'Disabled'}
+              </span>
+            </div>
+
+            {/* SMA */}
+            <div
+              className={
+                settings.smaFilter && settings.smaFilter > 0 ? '' : 'opacity-50'
+              }
+            >
+              <span className="text-gray-600">SMA:</span>{' '}
+              <span className="font-medium">
+                {settings.smaFilter && settings.smaFilter > 0
+                  ? `${settings.smaFilter} period`
+                  : 'Disabled'}
+              </span>
+            </div>
+
+            {/* VWAP */}
+            <div className={settings.useVWAP ? '' : 'opacity-50'}>
+              <span className="text-gray-600">VWAP:</span>{' '}
+              <span
+                className={`font-medium ${
+                  settings.useVWAP ? 'text-green-600' : ''
+                }`}
+              >
+                {settings.useVWAP ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+
+            {/* ADX */}
+            <div
+              className={
+                settings.adxThreshold && settings.adxThreshold > 0
+                  ? ''
+                  : 'opacity-50'
+              }
+            >
+              <span className="text-gray-600">ADX:</span>{' '}
+              <span className="font-medium">
+                {settings.adxThreshold && settings.adxThreshold > 0
+                  ? `> ${settings.adxThreshold} (Period 14)`
+                  : 'Disabled'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -172,6 +216,12 @@ export default function StatsSettingsDisplay({
                 {settings.takeProfit} pts
               </span>
             </div>
+            {settings.useTrailingStop && (
+              <div>
+                <span className="text-gray-600">Trailing:</span>{' '}
+                <span className="font-medium text-blue-600">Enabled</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -201,7 +251,42 @@ export default function StatsSettingsDisplay({
             </div>
           </div>
         )}
+
+        {/* Trailing Stop Details - Only show if enabled */}
+        {settings.useTrailingStop && (
+          <div className="bg-white p-4 rounded-lg">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Trailing Stop Details
+            </h4>
+            <div className="space-y-1 text-sm">
+              <div>
+                <span className="text-gray-600">BE Trigger:</span>{' '}
+                <span className="font-medium">
+                  {settings.breakevenTrigger || 3} pts
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600">Trail Distance:</span>{' '}
+                <span className="font-medium">
+                  {settings.trailDistance || 2} pts
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Filter Summary - NEW */}
+      {activeFilters > 0 && (
+        <div className="mt-4 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+          <p className="text-sm text-gray-700">
+            <span className="font-semibold">📊 Filter Logic:</span> With{' '}
+            {activeFilters} indicator{activeFilters > 1 ? 's' : ''} active, ALL
+            must agree for trades. LONG trades require price above all
+            indicators, SHORT trades require price below all indicators.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

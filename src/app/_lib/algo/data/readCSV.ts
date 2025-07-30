@@ -1,4 +1,4 @@
-// src/strategy/readCSV.ts - TRULY TIMEZONE-AGNOSTIC VERSION
+// src/strategy/readCSV.ts - FIXED VERSION WITH SMA AND VWAP
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
@@ -9,7 +9,6 @@ const BASE_DIR = path.join(
   process.cwd(),
   'src/app/_lib/algo/data/csv_database'
 );
-// src/strategy/readCSV.ts - Replace the parseTimestampToComponents function
 
 function parseTimestampToComponents(timestamp: string): {
   year: number;
@@ -67,8 +66,8 @@ function componentsToDateNumber(
 
 export async function* streamCsvBars(
   csvFiles: string[],
-  start: string, // "2025-07-20 6:00:00 PM"
-  end: string, // "2025-07-22 6:10:00 PM"
+  start: string,
+  end: string,
   params?: {
     emaMovingAverage?: number;
     adxPeriod?: number;
@@ -125,6 +124,8 @@ export async function* streamCsvBars(
 
   let totalBarsYielded = 0;
   let debugCount = 0;
+  let firstBarWithSMA = false;
+  let firstBarWithVWAP = false;
 
   // 2) Stream through each CSV file
   for (const f of csvFiles) {
@@ -137,7 +138,7 @@ export async function* streamCsvBars(
     let barsFromThisFile = 0;
 
     for await (const record of input as AsyncIterable<Record<string, string>>) {
-      const timestamp = record.timestamp; // e.g., "2025-07-20 3:00:00 PM"
+      const timestamp = record.timestamp;
 
       if (!timestamp) continue;
 
@@ -147,7 +148,7 @@ export async function* streamCsvBars(
         barComponents = parseTimestampToComponents(timestamp);
       } catch (error) {
         console.error(`Error parsing bar timestamp: "${timestamp}"`, error);
-        continue; // Skip this bar if we can't parse its timestamp
+        continue;
       }
 
       // Check date range using numbers (no timezone issues!)
@@ -163,7 +164,6 @@ export async function* streamCsvBars(
 
       // Check if it's a valid trading date
       if (!tradingDateSet.has(barComponents.dateKey)) {
-        // Skip non-trading days (weekends, holidays)
         continue;
       }
 
@@ -182,7 +182,7 @@ export async function* streamCsvBars(
         debugCount++;
       }
 
-      // Check if this bar falls within our daily time window (string comparison works!)
+      // Check if this bar falls within our daily time window
       if (
         barComponents.timeKey >= startComponents.timeKey &&
         barComponents.timeKey <= endComponents.timeKey
@@ -199,33 +199,68 @@ export async function* streamCsvBars(
           delta: parseFloat(record.delta),
 
           // CVD fields (always include if available)
-          cvd_open: parseFloat(record.cvd_open),
-          cvd_high: parseFloat(record.cvd_high),
-          cvd_low: parseFloat(record.cvd_low),
-          cvd_close: parseFloat(record.cvd_close),
-          cvd_color: record.cvd_color,
+          cvd_open: record.cvd_open ? parseFloat(record.cvd_open) : undefined,
+          cvd_high: record.cvd_high ? parseFloat(record.cvd_high) : undefined,
+          cvd_low: record.cvd_low ? parseFloat(record.cvd_low) : undefined,
+          cvd_close: record.cvd_close
+            ? parseFloat(record.cvd_close)
+            : undefined,
+          cvd_color: record.cvd_color || undefined,
 
           // ADX/DI fields (always include if available)
-          plus_di: parseFloat(record['+di']),
-          minus_di: parseFloat(record['-di']),
-          dx: parseFloat(record.dx),
-          adx: parseFloat(record.adx),
-          adxr: parseFloat(record.adxr),
+          plus_di: record['+di'] ? parseFloat(record['+di']) : undefined,
+          minus_di: record['-di'] ? parseFloat(record['-di']) : undefined,
+          dx: record.dx ? parseFloat(record.dx) : undefined,
+          adx: record.adx ? parseFloat(record.adx) : undefined,
+          adxr: record.adxr ? parseFloat(record.adxr) : undefined,
 
           // All EMA fields (always include if available)
-          ema_8: parseFloat(record.ema_8),
-          ema_9: parseFloat(record.ema_9),
-          ema_13: parseFloat(record.ema_13),
-          ema_21: parseFloat(record.ema_21),
-          ema_22: parseFloat(record.ema_22),
-          ema_50: parseFloat(record.ema_50),
-          ema_100: parseFloat(record.ema_100),
-          ema_200: parseFloat(record.ema_200),
+          ema_8: record.ema_8 ? parseFloat(record.ema_8) : undefined,
+          ema_9: record.ema_9 ? parseFloat(record.ema_9) : undefined,
+          ema_13: record.ema_13 ? parseFloat(record.ema_13) : undefined,
+          ema_21: record.ema_21 ? parseFloat(record.ema_21) : undefined,
+          ema_22: record.ema_22 ? parseFloat(record.ema_22) : undefined,
+          ema_50: record.ema_50 ? parseFloat(record.ema_50) : undefined,
+          ema_100: record.ema_100 ? parseFloat(record.ema_100) : undefined,
+          ema_200: record.ema_200 ? parseFloat(record.ema_200) : undefined,
+
+          // SMA fields - FIXED: Now properly parsing from CSV
+          sma_50: record.sma_50 ? parseFloat(record.sma_50) : undefined,
+          sma_100: record.sma_100 ? parseFloat(record.sma_100) : undefined,
+          sma_200: record.sma_200 ? parseFloat(record.sma_200) : undefined,
+
+          // VWAP - FIXED: Now properly parsing from CSV
+          vwap: record.vwap ? parseFloat(record.vwap) : undefined,
         };
+
+        // Debug logging for SMA/VWAP (only once)
+        if (!firstBarWithSMA && (bar.sma_50 || bar.sma_100 || bar.sma_200)) {
+          console.log(`📊 First bar with SMA data found at ${timestamp}:`);
+          console.log(`   - SMA50: ${bar.sma_50?.toFixed(2) || 'N/A'}`);
+          console.log(`   - SMA100: ${bar.sma_100?.toFixed(2) || 'N/A'}`);
+          console.log(`   - SMA200: ${bar.sma_200?.toFixed(2) || 'N/A'}`);
+          firstBarWithSMA = true;
+        }
+
+        if (!firstBarWithVWAP && bar.vwap) {
+          console.log(`📊 First bar with VWAP data found at ${timestamp}:`);
+          console.log(`   - VWAP: ${bar.vwap.toFixed(2)}`);
+          firstBarWithVWAP = true;
+        }
 
         // Only log first few bars to avoid spam
         if (barsFromThisFile < 3) {
           console.log(`📊 Bar #${barsFromThisFile + 1} for ${timestamp}`);
+          // Log SMA/VWAP values for first few bars if available
+          if (bar.sma_50 || bar.sma_100 || bar.sma_200 || bar.vwap) {
+            console.log(
+              `   Indicators: SMA50=${
+                bar.sma_50?.toFixed(2) || 'N/A'
+              }, SMA100=${bar.sma_100?.toFixed(2) || 'N/A'}, SMA200=${
+                bar.sma_200?.toFixed(2) || 'N/A'
+              }, VWAP=${bar.vwap?.toFixed(2) || 'N/A'}`
+            );
+          }
         }
 
         yield bar;
@@ -239,4 +274,12 @@ export async function* streamCsvBars(
   }
 
   console.log(`🎉 Total bars yielded across all files: ${totalBarsYielded}`);
+
+  // Summary of indicator availability
+  if (!firstBarWithSMA) {
+    console.log(`⚠️ WARNING: No SMA data found in any CSV files!`);
+  }
+  if (!firstBarWithVWAP) {
+    console.log(`⚠️ WARNING: No VWAP data found in any CSV files!`);
+  }
 }
