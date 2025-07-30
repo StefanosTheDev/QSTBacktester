@@ -16,13 +16,15 @@ export class BacktestLogger {
     if (this.isCapturing) return;
 
     this.isCapturing = true;
-    const logger = this; // Fix for @typescript-eslint/no-this-alias
+    // Using property instead of alias to fix ESLint error
+    const originalLog = this.originalConsoleLog;
+    const logArray = this.logs;
 
     // Override console.log
     console.log = function (...args: unknown[]) {
       // Fix for @typescript-eslint/no-explicit-any
       // Call original console.log
-      logger.originalConsoleLog.apply(console, args);
+      originalLog.apply(console, args);
 
       // Capture to our logs
       const message = args
@@ -31,7 +33,7 @@ export class BacktestLogger {
         )
         .join(' ');
 
-      logger.logs.push(message);
+      logArray.push(message);
     };
   }
 

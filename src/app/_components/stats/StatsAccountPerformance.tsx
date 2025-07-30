@@ -42,8 +42,8 @@ interface StatsAccountPerformanceProps {
 export default function StatsAccountPerformance({
   accountStats,
   drawdownEvents = [],
-  equityCurve = [],
-}: StatsAccountPerformanceProps) {
+}: // Removed equityCurve since it's not used
+StatsAccountPerformanceProps) {
   if (!accountStats) {
     return <div>No account data available</div>;
   }

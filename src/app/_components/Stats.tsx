@@ -43,7 +43,21 @@ interface StatsProps {
       daysHitStop?: number;
       daysHitTarget?: number;
       totalTradingDays?: number;
-      accountStats?: any; // This should contain your account data
+      accountStats?: {
+        startingBalance: number;
+        finalBalance: number;
+        totalReturn: number;
+        totalReturnPercent: number;
+        maxDrawdown: number;
+        maxDrawdownPercent: number;
+        maxDrawdownDuration: number;
+        currentDrawdown: number;
+        currentDrawdownPercent: number;
+        highWaterMark: number;
+        lowestBalance: number;
+        returnToDrawdownRatio: number;
+        numberOfDrawdowns: number;
+      };
     };
     trades?: TradeRecord[];
     intradayStats?: Record<
@@ -62,8 +76,26 @@ interface StatsProps {
       equity: number;
       drawdownPercent: number;
     }>;
-    drawdownEvents?: any[];
-    dailyAccountData?: Record<string, any>;
+    drawdownEvents?: Array<{
+      startDate: string;
+      endDate: string;
+      startBalance: number;
+      lowestBalance: number;
+      drawdownAmount: number;
+      drawdownPercent: number;
+      duration: number;
+      recovered: boolean;
+    }>;
+    dailyAccountData?: Record<
+      string,
+      {
+        balance: number;
+        equity: number;
+        drawdown: number;
+        drawdownPercent: number;
+        trades: number;
+      }
+    >;
   };
   settings?: FormProp;
 }
@@ -81,7 +113,7 @@ export default function Stats({ results, settings }: StatsProps) {
     intradayStats = {},
     equityCurve = [],
     drawdownEvents = [],
-    dailyAccountData = {},
+    // Removed dailyAccountData since it's not used
   } = results;
 
   // Debug log to see what data we have

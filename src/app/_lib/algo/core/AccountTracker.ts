@@ -38,7 +38,7 @@ export class AccountTracker {
     this.highWaterMark = startingBalance;
 
     // Record initial snapshot
-    this.recordSnapshot(new Date().toISOString(), 0);
+    this.recordSnapshot(new Date().toISOString());
   }
 
   recordTrade(
@@ -105,14 +105,14 @@ export class AccountTracker {
     }
 
     // Record snapshot
-    this.recordSnapshot(timestamp, netProfitLoss);
+    this.recordSnapshot(timestamp);
   }
 
   updateOpenPosition(openPnL: number): void {
     this.openPositionValue = openPnL;
   }
 
-  private recordSnapshot(timestamp: string, lastTradePnL: number): void {
+  private recordSnapshot(timestamp: string): void {
     const equity = this.currentBalance + this.openPositionValue;
     const drawdown = this.highWaterMark - equity;
     const drawdownPercent =
@@ -278,7 +278,17 @@ export class AccountTracker {
       trades: number;
     }
   > {
-    const dailyData: Record<string, any> = {};
+    const dailyData: Record<
+      string,
+      {
+        balance: number;
+        equity: number;
+        drawdown: number;
+        drawdownPercent: number;
+        trades: number;
+        previousTradeCount?: number;
+      }
+    > = {};
 
     this.snapshots.forEach((snapshot) => {
       const date = snapshot.timestamp.split(' ')[0]; // Get date part
