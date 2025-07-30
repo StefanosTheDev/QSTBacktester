@@ -53,19 +53,19 @@ export default function EquityCurveChart({
     .join(' ');
 
   // Create path for drawdown areas
-  const drawdownPath =
-    equityCurve
-      .map((point, i) => {
-        const y = yScale(point.balance);
-        const baseline = yScale(startingBalance);
-        return `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${
-          point.balance < startingBalance ? y : baseline
-        }`;
-      })
-      .join(' ') +
-    ` L ${xScale(equityCurve.length - 1)} ${yScale(startingBalance)} L ${xScale(
-      0
-    )} ${yScale(startingBalance)} Z`;
+  //   const drawdownPath =
+  //     equityCurve
+  //       .map((point, i) => {
+  //         const y = yScale(point.balance);
+  //         const baseline = yScale(startingBalance);
+  //         return `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${
+  //           point.balance < startingBalance ? y : baseline
+  //         }`;
+  //       })
+  //       .join(' ') +
+  //     ` L ${xScale(equityCurve.length - 1)} ${yScale(startingBalance)} L ${xScale(
+  //       0
+  //     )} ${yScale(startingBalance)} Z`;
 
   // Format currency
   const formatCurrency = (value: number) =>
