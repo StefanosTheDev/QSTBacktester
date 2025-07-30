@@ -37,9 +37,7 @@ export class SignalGenerator {
       priceWindow,
       volumeWindow,
       bar,
-      prevBar,
       emaValue,
-      prevEmaValue,
       adxValue,
       adxThreshold,
     } = filters;
