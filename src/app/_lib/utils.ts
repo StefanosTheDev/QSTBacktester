@@ -45,6 +45,17 @@ export function buildParams(input: FormProp): ApiParams {
   if (input.adxThreshold) params.adxThreshold = input.adxThreshold;
   if (input.adxPeriod) params.adxPeriod = input.adxPeriod;
 
+  // ADD THESE LINES FOR SMA AND VWAP
+  if (input.smaFilter !== undefined && input.smaFilter !== 0) {
+    params.smaFilter =
+      typeof input.smaFilter === 'string'
+        ? parseInt(input.smaFilter)
+        : input.smaFilter;
+  }
+  if (input.useVWAP !== undefined) {
+    params.useVWAP = input.useVWAP;
+  }
+
   // Daily limits can be 0 (to disable), so always include them
   if (input.maxDailyLoss !== undefined)
     params.maxDailyLoss = input.maxDailyLoss;

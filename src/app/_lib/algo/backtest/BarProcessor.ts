@@ -1,4 +1,4 @@
-// src/strategy/BarProcessor.ts - Update the generateSignal method
+// src/strategy/BarProcessor.ts
 import { CsvBar } from '../types/types';
 import { streamCsvBars } from '../data/readCSV';
 import { fitTrendlinesWindow } from '../analysis/TrendLineAnalysis';
@@ -73,6 +73,14 @@ export class BarProcessor {
         ? (prevBar[`ema_${this.emaMovingAverage}` as keyof CsvBar] as number)
         : undefined;
     const adxValue = bar.adx;
+
+    // Add logging to debug
+    if (signal !== 'none') {
+      console.log(`    → Initial signal: ${signal}`);
+      console.log(
+        `    → Bar data - Price: ${bar.close}, EMA${this.emaMovingAverage}: ${emaValue}, ADX: ${adxValue}`
+      );
+    }
 
     // Validate signal with all filters including new indicator checks
     signal = signalGenerator.validateSignal(signal, trendlines, {

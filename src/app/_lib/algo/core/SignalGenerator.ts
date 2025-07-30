@@ -37,7 +37,9 @@ export class SignalGenerator {
       priceWindow,
       volumeWindow,
       bar,
-      emaValue,
+      prevBar, // eslint-disable-line @typescript-eslint/no-unused-vars
+      emaValue, // eslint-disable-line @typescript-eslint/no-unused-vars
+      prevEmaValue, // eslint-disable-line @typescript-eslint/no-unused-vars
       adxValue,
       adxThreshold,
     } = filters;
@@ -78,34 +80,7 @@ export class SignalGenerator {
       return 'none';
     }
 
-    // 5. EMA filter - now handles any EMA value
-    if (emaValue !== undefined) {
-      // For bullish signals, price should be above EMA
-      if (signal === 'bullish' && bar.close < emaValue) {
-        console.log(
-          `    → filtered: bullish signal but price ${bar.close.toFixed(
-            2
-          )} below EMA ${emaValue.toFixed(2)}`
-        );
-        return 'none';
-      }
-      // For bearish signals, price should be below EMA
-      if (signal === 'bearish' && bar.close > emaValue) {
-        console.log(
-          `    → filtered: bearish signal but price ${bar.close.toFixed(
-            2
-          )} above EMA ${emaValue.toFixed(2)}`
-        );
-        return 'none';
-      }
-      console.log(
-        `    → EMA filter passed: price ${bar.close.toFixed(
-          2
-        )} vs EMA ${emaValue.toFixed(2)}`
-      );
-    }
-
-    // 6. NEW - Multiple Indicator Filters (EMA, SMA, VWAP)
+    // 5. Multiple Indicator Filters (EMA, SMA, VWAP)
     const indicatorCheckResult = this.checkMultipleIndicators(bar, signal);
     if (!indicatorCheckResult.passed) {
       console.log(
@@ -114,7 +89,7 @@ export class SignalGenerator {
       return 'none';
     }
 
-    // 7. ADX filter with directional movement
+    // 6. ADX filter with directional movement
     if (adxThreshold && adxValue !== undefined) {
       // First check if trend is strong enough
       if (adxValue < adxThreshold) {
@@ -152,7 +127,7 @@ export class SignalGenerator {
       }
     }
 
-    // 8. CVD color confirmation (if available)
+    // 7. CVD color confirmation (if available)
     if (bar.cvd_color) {
       if (signal === 'bullish' && bar.cvd_color === 'red') {
         console.log(
@@ -222,13 +197,8 @@ export class SignalGenerator {
 
     // If no indicators are selected, pass the check
     if (activeChecks.length === 0) {
-      console.log('    → No additional indicator filters active');
       return { passed: true };
     }
-
-    console.log(
-      `    → Checking ${activeChecks.length} indicator filter(s) for ${signal} signal:`
-    );
 
     // Check each active indicator
     const failedChecks: string[] = [];
@@ -245,22 +215,6 @@ export class SignalGenerator {
       } else {
         passedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
       }
-    }
-
-    // Log the results
-    if (passedChecks.length > 0) {
-      console.log(
-        `      ✓ Price ${bar.close.toFixed(2)} above: ${passedChecks.join(
-          ', '
-        )}`
-      );
-    }
-    if (failedChecks.length > 0) {
-      console.log(
-        `      ✗ Price ${bar.close.toFixed(2)} below: ${failedChecks.join(
-          ', '
-        )}`
-      );
     }
 
     // ALL selected indicators must have price above them

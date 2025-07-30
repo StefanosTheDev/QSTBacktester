@@ -106,6 +106,8 @@ export default function AlgoForm() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     console.log('▶ handleSubmit start');
+    console.log('📤 Sending values:', values); // ADD THIS LINE
+
     setLoading(true);
     setError(null);
 
