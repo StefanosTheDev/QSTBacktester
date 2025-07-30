@@ -43,7 +43,13 @@ export class SignalGenerator {
       adxValue,
       adxThreshold,
     } = filters;
-
+    if (adxThreshold && adxThreshold > 0) {
+      console.log(
+        `    → ADX Debug: threshold=${adxThreshold}, current ADX=${
+          adxValue?.toFixed(2) || 'undefined'
+        }`
+      );
+    }
     // 1. Reversal filter - wait for opposite signal
     if (signal === lastSignal) {
       console.log(`    → filtered: waiting for reversal from ${lastSignal}`);
@@ -89,9 +95,20 @@ export class SignalGenerator {
       return 'none';
     }
 
-    // 6. ADX filter with directional movement
-    if (adxThreshold && adxValue !== undefined) {
-      // First check if trend is strong enough
+    // 6. ADX filter - only check if above threshold (no directional requirement)
+    if (adxThreshold && adxThreshold > 0) {
+      // Log what we're checking
+      console.log(`    → Checking ADX filter: threshold=${adxThreshold}`);
+
+      if (adxValue === undefined) {
+        console.log(
+          `    → ADX value is undefined - may still be calculating (needs ${
+            14 * 2
+          } bars)`
+        );
+        return 'none';
+      }
+
       if (adxValue < adxThreshold) {
         console.log(
           `    → filtered by ADX strength: ${adxValue.toFixed(
@@ -100,31 +117,7 @@ export class SignalGenerator {
         );
         return 'none';
       }
-
-      // Then check if direction matches using DI values
-      if (bar.plus_di !== undefined && bar.minus_di !== undefined) {
-        if (signal === 'bullish' && bar.plus_di < bar.minus_di) {
-          console.log(
-            `    → filtered by ADX direction: +DI ${bar.plus_di.toFixed(
-              2
-            )} < -DI ${bar.minus_di.toFixed(2)} for bullish signal`
-          );
-          return 'none';
-        }
-        if (signal === 'bearish' && bar.minus_di < bar.plus_di) {
-          console.log(
-            `    → filtered by ADX direction: -DI ${bar.minus_di.toFixed(
-              2
-            )} < +DI ${bar.plus_di.toFixed(2)} for bearish signal`
-          );
-          return 'none';
-        }
-        console.log(
-          `    → ADX passed: ADX=${adxValue.toFixed(
-            2
-          )}, +DI=${bar.plus_di.toFixed(2)}, -DI=${bar.minus_di.toFixed(2)}`
-        );
-      }
+      console.log(`    → ADX passed: ${adxValue.toFixed(2)} > ${adxThreshold}`);
     }
 
     // 7. CVD color confirmation (if available)
@@ -149,8 +142,13 @@ export class SignalGenerator {
 
   private checkMultipleIndicators(
     bar: CsvBar,
-    signal: 'bullish' | 'bearish'
+    signal: 'bullish' | 'bearish' | 'none'
   ): { passed: boolean; reason?: string } {
+    // Early return if no signal
+    if (signal === 'none') {
+      return { passed: true };
+    }
+
     const checks: {
       name: string;
       value: number | undefined;
@@ -200,7 +198,7 @@ export class SignalGenerator {
       return { passed: true };
     }
 
-    // Check each active indicator
+    // Check each active indicator based on signal direction
     const failedChecks: string[] = [];
     const passedChecks: string[] = [];
 
@@ -209,19 +207,68 @@ export class SignalGenerator {
 
       const priceAbove = bar.close > check.value;
 
-      // For both LONG and SHORT, price must be above all selected indicators
-      if (!priceAbove) {
-        failedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
-      } else {
-        passedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+      if (signal === 'bullish') {
+        // For LONG: price must be ABOVE indicators
+        if (!priceAbove) {
+          failedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+        } else {
+          passedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+        }
+      } else if (signal === 'bearish') {
+        // For SHORT: price must be BELOW indicators
+        if (priceAbove) {
+          failedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+        } else {
+          passedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+        }
       }
     }
 
-    // ALL selected indicators must have price above them
+    // Log the results
+    console.log(
+      `    → Checking ${activeChecks.length} indicator filter(s) for ${signal} signal:`
+    );
+
+    if (signal === 'bullish') {
+      if (passedChecks.length > 0) {
+        console.log(
+          `      ✓ LONG: Price ${bar.close.toFixed(
+            2
+          )} above: ${passedChecks.join(', ')}`
+        );
+      }
+      if (failedChecks.length > 0) {
+        console.log(
+          `      ✗ LONG: Price ${bar.close.toFixed(
+            2
+          )} NOT above: ${failedChecks.join(', ')}`
+        );
+      }
+    } else {
+      if (passedChecks.length > 0) {
+        console.log(
+          `      ✓ SHORT: Price ${bar.close.toFixed(
+            2
+          )} below: ${passedChecks.join(', ')}`
+        );
+      }
+      if (failedChecks.length > 0) {
+        console.log(
+          `      ✗ SHORT: Price ${bar.close.toFixed(
+            2
+          )} NOT below: ${failedChecks.join(', ')}`
+        );
+      }
+    }
+
+    // ALL selected indicators must pass
     if (failedChecks.length > 0) {
       return {
         passed: false,
-        reason: `Price below ${failedChecks.join(', ')}`,
+        reason:
+          signal === 'bullish'
+            ? `LONG blocked - Price not above ${failedChecks.join(', ')}`
+            : `SHORT blocked - Price not below ${failedChecks.join(', ')}`,
       };
     }
 

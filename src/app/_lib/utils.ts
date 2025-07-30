@@ -1,5 +1,6 @@
 import { FormProp } from '../types/types';
 import { ApiParams } from './algo/types/types';
+
 /**
  * Extended form parameters including ISO start/end strings.
  */
@@ -7,6 +8,7 @@ export interface FormParams extends FormProp {
   start: string;
   end: string;
 }
+
 export function buildParams(input: FormProp): ApiParams {
   const { startDate, startTime, endDate, endTime } = input;
 
@@ -42,8 +44,14 @@ export function buildParams(input: FormProp): ApiParams {
   // Add optional parameters only if they have values
   if (input.cvdLookBackBars) params.cvdLookBackBars = input.cvdLookBackBars;
   if (input.emaMovingAverage) params.emaMovingAverage = input.emaMovingAverage;
-  if (input.adxThreshold) params.adxThreshold = input.adxThreshold;
-  if (input.adxPeriod) params.adxPeriod = input.adxPeriod;
+
+  // FIX: Use !== undefined to properly handle all numeric values including 0
+  if (input.adxThreshold !== undefined) {
+    params.adxThreshold = input.adxThreshold;
+  }
+  // if (input.adxPeriod !== undefined) {
+  //   params.adxPeriod = input.adxPeriod;
+  // }
 
   // ADD THESE LINES FOR SMA AND VWAP
   if (input.smaFilter !== undefined && input.smaFilter !== 0) {
@@ -75,6 +83,7 @@ export function buildParams(input: FormProp): ApiParams {
 
   return params;
 }
+
 export function toCsvPst(date: string, time: string): string {
   const [hours, minutes] = time.split(':').map(Number);
 

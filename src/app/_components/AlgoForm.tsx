@@ -69,7 +69,6 @@ export default function AlgoForm() {
 
     emaMovingAverage: 0, // Can be any value: 21, 50, 100, 200, etc.
     adxThreshold: 0,
-    adxPeriod: 0,
 
     // NEW - SMA and VWAP filters
     smaFilter: 0, // 0 = off, 50/100/200 = on with that value
@@ -363,6 +362,7 @@ export default function AlgoForm() {
                         Use VWAP Filter
                       </span>
                     </label>
+
                     <label className="flex flex-col">
                       <span className="text-sm text-gray-600">
                         ADX Threshold (0 = disabled)
@@ -376,6 +376,9 @@ export default function AlgoForm() {
                         min="0"
                         className="mt-1 border rounded px-3 py-2 text-gray-800"
                       />
+                      <span className="text-xs text-gray-500 mt-1">
+                        Uses ADX period of 14. Set to 0 to disable ADX filter.
+                      </span>
                     </label>
                   </div>
                 </div>

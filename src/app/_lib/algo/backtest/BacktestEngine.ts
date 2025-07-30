@@ -10,6 +10,7 @@ import { BarProcessor } from './BarProcessor';
 import { BacktestResult, IntradayStats, PendingSignal } from './BacktestTypes';
 import { TradeRecord } from '../types/types';
 import { ExitResult } from '../trading/PositionTypes';
+
 export class BacktestEngine {
   private logger: BacktestLogger;
   private positionManager: PositionManager;
@@ -52,6 +53,7 @@ export class BacktestEngine {
       formData.adxThreshold
     );
   }
+
   async run(csvFiles: string[]): Promise<BacktestResult> {
     // Initialize logging
     this.logger.logTimezoneDiagnostics();
@@ -373,6 +375,10 @@ export class BacktestEngine {
     }
     if (this.formData.useVWAP) {
       activeFilters.push('VWAP');
+    }
+    // ADD THIS FOR ADX
+    if (this.formData.adxThreshold && this.formData.adxThreshold > 0) {
+      activeFilters.push(`ADX>${this.formData.adxThreshold}`);
     }
 
     if (activeFilters.length > 0) {
