@@ -1,4 +1,4 @@
-// components/Stats.tsx - Main container component
+// src/app/_components/Stats.tsx
 import React, { useState } from 'react';
 import { FormProp } from '../types/types';
 import StatsOverview from './stats/StatsOverView';
@@ -7,6 +7,7 @@ import StatsTradeDetails from './stats/StatsTradeDetails';
 import StatsDailyPnL from './stats/StatsDailyPnL';
 import StatsExecutionLog from './stats/StatsExecutionLog';
 import StatsSettingsDisplay from './stats/StatsSettingsDisplay';
+import StatsAccountPerformance from './stats/StatsAccountPerformance'; // Make sure this import exists!
 
 interface TradeRecord {
   entryDate: string;
@@ -42,6 +43,7 @@ interface StatsProps {
       daysHitStop?: number;
       daysHitTarget?: number;
       totalTradingDays?: number;
+      accountStats?: any; // This should contain your account data
     };
     trades?: TradeRecord[];
     intradayStats?: Record<
@@ -54,16 +56,40 @@ interface StatsProps {
         trades: number;
       }
     >;
+    equityCurve?: Array<{
+      timestamp: string;
+      balance: number;
+      equity: number;
+      drawdownPercent: number;
+    }>;
+    drawdownEvents?: any[];
+    dailyAccountData?: Record<string, any>;
   };
-  settings?: FormProp; // Trading settings from the form
+  settings?: FormProp;
 }
 
 export default function Stats({ results, settings }: StatsProps) {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'trades' | 'daily' | 'cards' | 'logs'
+    'overview' | 'trades' | 'daily' | 'cards' | 'account' | 'logs'
   >('overview');
 
-  const { count, logs, statistics, trades = [], intradayStats = {} } = results;
+  const {
+    count,
+    logs,
+    statistics,
+    trades = [],
+    intradayStats = {},
+    equityCurve = [],
+    drawdownEvents = [],
+    dailyAccountData = {},
+  } = results;
+
+  // Debug log to see what data we have
+  console.log('Stats Component - Account Data:', {
+    accountStats: statistics.accountStats,
+    equityCurve: equityCurve.length,
+    drawdownEvents: drawdownEvents.length,
+  });
 
   // Export functionality
   const exportResults = () => {
@@ -114,6 +140,28 @@ export default function Stats({ results, settings }: StatsProps) {
           Overview
         </button>
         <button
+          onClick={() => setActiveTab('account')}
+          className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'account'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Account ($50k)
+          {statistics.accountStats && (
+            <span
+              className={`ml-1 text-xs ${
+                statistics.accountStats.totalReturnPercent >= 0
+                  ? 'text-green-600'
+                  : 'text-red-600'
+              }`}
+            >
+              ({statistics.accountStats.totalReturnPercent > 0 ? '+' : ''}
+              {statistics.accountStats.totalReturnPercent.toFixed(1)}%)
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab('trades')}
           className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'trades'
@@ -160,6 +208,32 @@ export default function Stats({ results, settings }: StatsProps) {
         <StatsOverview statistics={statistics} count={count} />
       )}
 
+      {activeTab === 'account' && (
+        <>
+          {statistics.accountStats ? (
+            <StatsAccountPerformance
+              accountStats={statistics.accountStats}
+              drawdownEvents={drawdownEvents}
+              equityCurve={equityCurve}
+            />
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-2">
+                Account Data Not Available
+              </h3>
+              <p className="text-yellow-700">
+                The account tracking feature may not be properly initialized.
+                Please ensure your backtest is using the latest version with
+                AccountTracker.
+              </p>
+              <p className="text-sm text-yellow-600 mt-2">
+                Check the console for any errors or missing data.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
       {activeTab === 'trades' && <StatsTradeDetails trades={trades} />}
 
       {activeTab === 'daily' && (
@@ -191,6 +265,25 @@ export default function Stats({ results, settings }: StatsProps) {
           Export Log (TXT)
         </button>
       </div>
+
+      {/* Debug Info - Remove this after testing */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-4 p-4 bg-gray-100 rounded text-xs">
+          <h4 className="font-bold">Debug Info:</h4>
+          <pre>
+            {JSON.stringify(
+              {
+                hasAccountStats: !!statistics.accountStats,
+                equityCurveLength: equityCurve.length,
+                drawdownEventsLength: drawdownEvents.length,
+                activeTab: activeTab,
+              },
+              null,
+              2
+            )}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

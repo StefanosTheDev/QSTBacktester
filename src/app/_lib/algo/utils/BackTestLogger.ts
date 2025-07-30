@@ -1,4 +1,4 @@
-// src/strategy/utils/BacktestLogger.ts
+// src/app/_lib/algo/utils/BackTestLogger.ts
 import { DateTime } from 'luxon';
 
 export class BacktestLogger {
@@ -16,12 +16,13 @@ export class BacktestLogger {
     if (this.isCapturing) return;
 
     this.isCapturing = true;
-    const self = this;
+    const logger = this; // Fix for @typescript-eslint/no-this-alias
 
     // Override console.log
-    console.log = function (...args: any[]) {
+    console.log = function (...args: unknown[]) {
+      // Fix for @typescript-eslint/no-explicit-any
       // Call original console.log
-      self.originalConsoleLog.apply(console, args);
+      logger.originalConsoleLog.apply(console, args);
 
       // Capture to our logs
       const message = args
@@ -30,7 +31,7 @@ export class BacktestLogger {
         )
         .join(' ');
 
-      self.logs.push(message);
+      logger.logs.push(message);
     };
   }
 

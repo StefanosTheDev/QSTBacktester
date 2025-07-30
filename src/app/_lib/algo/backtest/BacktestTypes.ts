@@ -38,9 +38,52 @@ export interface BacktestResult {
       longAvgProfit: number;
       shortAvgProfit: number;
     };
+    // New account statistics
+    accountStats?: {
+      startingBalance: number;
+      finalBalance: number;
+      totalReturn: number;
+      totalReturnPercent: number;
+      maxDrawdown: number;
+      maxDrawdownPercent: number;
+      maxDrawdownDuration: number;
+      currentDrawdown: number;
+      currentDrawdownPercent: number;
+      highWaterMark: number;
+      lowestBalance: number;
+      returnToDrawdownRatio: number;
+      numberOfDrawdowns: number;
+    };
   };
   trades: TradeRecord[];
   intradayStats?: Record<string, IntradayStats>;
+  // New fields for account tracking
+  equityCurve?: Array<{
+    timestamp: string;
+    balance: number;
+    equity: number;
+    drawdownPercent: number;
+  }>;
+  drawdownEvents?: Array<{
+    startDate: string;
+    endDate: string;
+    startBalance: number;
+    lowestBalance: number;
+    drawdownAmount: number;
+    drawdownPercent: number;
+    duration: number;
+    recovered: boolean;
+  }>;
+  dailyAccountData?: Record<
+    string,
+    {
+      balance: number;
+      equity: number;
+      drawdown: number;
+      drawdownPercent: number;
+      trades: number;
+    }
+  >;
 }
 
 export interface IntradayStats {

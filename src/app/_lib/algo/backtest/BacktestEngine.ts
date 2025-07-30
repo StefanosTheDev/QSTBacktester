@@ -1,3 +1,4 @@
+// src/app/_lib/algo/backtest/BacktestEngine.ts
 import { ApiParams, CsvBar } from '../types/types';
 import { PositionManager } from '../core/PositionManager';
 import { SignalGenerator } from '../core/SignalGenerator';
@@ -10,6 +11,7 @@ import { BarProcessor } from './BarProcessor';
 import { BacktestResult, IntradayStats, PendingSignal } from './BacktestTypes';
 import { TradeRecord } from '../types/types';
 import { ExitResult } from '../trading/PositionTypes';
+import { AccountTracker } from '../core/AccountTracker';
 
 export class BacktestEngine {
   private logger: BacktestLogger;
@@ -17,6 +19,7 @@ export class BacktestEngine {
   private signalGenerator: SignalGenerator;
   private dailyLimitManager: DailyLimitManager;
   private barProcessor: BarProcessor;
+  private accountTracker: AccountTracker;
 
   // State
   private trades: TradeRecord[] = [];
@@ -24,7 +27,6 @@ export class BacktestEngine {
   private pendingSignal: PendingSignal | null = null;
   private lastSignal: 'bullish' | 'bearish' | null = null;
 
-  // src/strategy/BacktestEngine.ts - Updated constructor
   constructor(private formData: ApiParams) {
     this.logger = new BacktestLogger();
     this.positionManager = new PositionManager(
@@ -52,6 +54,9 @@ export class BacktestEngine {
       formData.emaMovingAverage,
       formData.adxThreshold
     );
+
+    // Initialize account tracker with 50k starting balance
+    this.accountTracker = new AccountTracker(50000);
   }
 
   async run(csvFiles: string[]): Promise<BacktestResult> {
@@ -167,7 +172,30 @@ export class BacktestEngine {
       exitResult.profit || 0
     );
 
+    // Record with account tracker
+    this.accountTracker.recordTrade(
+      bar.timestamp,
+      exitResult.profit || 0,
+      true
+    );
+
     // Update intraday tracking
+    const dateKey = DateTimeUtils.getDateKey(bar.timestamp);
+    if (!this.intradayStats[dateKey]) {
+      this.intradayStats[dateKey] = {
+        date: dateKey,
+        maxHigh: 0,
+        maxLow: 0,
+        finalPnL: 0,
+        trades: 0,
+      };
+    }
+
+    const dayStats = this.intradayStats[dateKey];
+    dayStats.finalPnL += exitResult.profit || 0;
+    dayStats.trades++;
+    dayStats.maxHigh = Math.max(dayStats.maxHigh, dayStats.finalPnL);
+    dayStats.maxLow = Math.min(dayStats.maxLow, dayStats.finalPnL);
 
     // Log exit
     const actualPoints = exitResult.tradeRecord
@@ -274,6 +302,7 @@ export class BacktestEngine {
   private generateResults(count: number): BacktestResult {
     const baseStats = this.positionManager.getStatistics().getStatistics();
     const dailyLimitStats = this.dailyLimitManager.getSummary();
+    const accountStats = this.accountTracker.getAccountSummary();
 
     // Validate trades
     const validation = TradeValidator.validateTrades(
@@ -292,7 +321,37 @@ export class BacktestEngine {
 
     validationLogs.forEach((log) => this.logger.log(log));
 
-    // Create final statistics - baseStats now includes longShortStats
+    // Log account summary
+    this.logger.log(`\n💰 ACCOUNT PERFORMANCE (Starting Balance: $50,000):`);
+    this.logger.log(
+      `   - Final Balance: $${accountStats.finalBalance.toFixed(2)}`
+    );
+    this.logger.log(
+      `   - Total Return: $${accountStats.totalReturn.toFixed(
+        2
+      )} (${accountStats.totalReturnPercent.toFixed(2)}%)`
+    );
+    this.logger.log(
+      `   - Max Drawdown: $${accountStats.maxDrawdown.toFixed(
+        2
+      )} (${accountStats.maxDrawdownPercent.toFixed(2)}%)`
+    );
+    this.logger.log(
+      `   - Lowest Balance: $${accountStats.lowestBalance.toFixed(2)}`
+    );
+    this.logger.log(
+      `   - High Water Mark: $${accountStats.highWaterMark.toFixed(2)}`
+    );
+
+    if (accountStats.currentDrawdown > 0) {
+      this.logger.log(
+        `   - ⚠️ Currently in Drawdown: $${accountStats.currentDrawdown.toFixed(
+          2
+        )} (${accountStats.currentDrawdownPercent.toFixed(2)}%)`
+      );
+    }
+
+    // Create final statistics
     const statistics = {
       ...baseStats,
       totalProfit: dailyLimitStats.totalActualPnL,
@@ -302,6 +361,22 @@ export class BacktestEngine {
       totalTradingDays: dailyLimitStats.totalDays,
       actualTotalProfit: dailyLimitStats.totalActualPnL,
       actualDailyPnL: this.dailyLimitManager.getDailyActualPnL(),
+      // New account statistics
+      accountStats: {
+        startingBalance: accountStats.startingBalance,
+        finalBalance: accountStats.finalBalance,
+        totalReturn: accountStats.totalReturn,
+        totalReturnPercent: accountStats.totalReturnPercent,
+        maxDrawdown: accountStats.maxDrawdown,
+        maxDrawdownPercent: accountStats.maxDrawdownPercent,
+        maxDrawdownDuration: accountStats.maxDrawdownDuration,
+        currentDrawdown: accountStats.currentDrawdown,
+        currentDrawdownPercent: accountStats.currentDrawdownPercent,
+        highWaterMark: accountStats.highWaterMark,
+        lowestBalance: accountStats.lowestBalance,
+        returnToDrawdownRatio: accountStats.returnToDrawdownRatio,
+        numberOfDrawdowns: accountStats.numberOfDrawdowns,
+      },
     };
 
     // Log summary
@@ -318,6 +393,9 @@ export class BacktestEngine {
       statistics,
       trades: this.trades,
       intradayStats: this.intradayStats,
+      equityCurve: this.accountTracker.getEquityCurve(),
+      drawdownEvents: this.accountTracker.getDrawdownEvents(),
+      dailyAccountData: this.accountTracker.getDailyBalances(),
     };
   }
 
@@ -384,7 +462,6 @@ export class BacktestEngine {
     if (this.formData.useVWAP) {
       activeFilters.push('VWAP');
     }
-    // ADD THIS FOR ADX
     if (this.formData.adxThreshold && this.formData.adxThreshold > 0) {
       activeFilters.push(`ADX>${this.formData.adxThreshold}`);
     }
