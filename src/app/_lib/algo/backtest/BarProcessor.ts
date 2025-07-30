@@ -1,8 +1,9 @@
-// src/strategy/BarProcessor.ts
+// src/strategy/BarProcessor.ts - Update the generateSignal method
 import { CsvBar } from '../types/types';
 import { streamCsvBars } from '../data/readCSV';
 import { fitTrendlinesWindow } from '../analysis/TrendLineAnalysis';
 import { SignalGenerator } from '../core/SignalGenerator';
+
 export class BarProcessor {
   private cvdWindow: number[] = [];
   private priceWindow: number[] = [];
@@ -73,7 +74,7 @@ export class BarProcessor {
         : undefined;
     const adxValue = bar.adx;
 
-    // Validate signal
+    // Validate signal with all filters including new indicator checks
     signal = signalGenerator.validateSignal(signal, trendlines, {
       lastSignal,
       priceWindow: this.priceWindow,

@@ -1,7 +1,19 @@
-// src/strategy/SignalGenerator.ts
+// src/core/SignalGenerator.ts
 import { CsvBar, TrendlineResult } from '../types/types';
 
+interface IndicatorFilters {
+  emaMovingAverage?: number;
+  smaFilter?: number;
+  useVWAP?: boolean;
+}
+
 export class SignalGenerator {
+  private indicatorFilters: IndicatorFilters;
+
+  constructor(indicatorFilters: IndicatorFilters = {}) {
+    this.indicatorFilters = indicatorFilters;
+  }
+
   validateSignal(
     signal: 'bullish' | 'bearish' | 'none',
     trendlines: TrendlineResult,
@@ -25,9 +37,9 @@ export class SignalGenerator {
       priceWindow,
       volumeWindow,
       bar,
-      prevBar, // eslint-disable-line @typescript-eslint/no-unused-vars
+      prevBar,
       emaValue,
-      prevEmaValue, // eslint-disable-line @typescript-eslint/no-unused-vars
+      prevEmaValue,
       adxValue,
       adxThreshold,
     } = filters;
@@ -68,7 +80,7 @@ export class SignalGenerator {
       return 'none';
     }
 
-    // 5. EMA filter - proper implementation
+    // 5. EMA filter - now handles any EMA value
     if (emaValue !== undefined) {
       // For bullish signals, price should be above EMA
       if (signal === 'bullish' && bar.close < emaValue) {
@@ -95,7 +107,16 @@ export class SignalGenerator {
       );
     }
 
-    // 6. ADX filter with directional movement
+    // 6. NEW - Multiple Indicator Filters (EMA, SMA, VWAP)
+    const indicatorCheckResult = this.checkMultipleIndicators(bar, signal);
+    if (!indicatorCheckResult.passed) {
+      console.log(
+        `    → filtered by indicator checks: ${indicatorCheckResult.reason}`
+      );
+      return 'none';
+    }
+
+    // 7. ADX filter with directional movement
     if (adxThreshold && adxValue !== undefined) {
       // First check if trend is strong enough
       if (adxValue < adxThreshold) {
@@ -133,7 +154,7 @@ export class SignalGenerator {
       }
     }
 
-    // 7. CVD color confirmation (if available)
+    // 8. CVD color confirmation (if available)
     if (bar.cvd_color) {
       if (signal === 'bullish' && bar.cvd_color === 'red') {
         console.log(
@@ -151,5 +172,107 @@ export class SignalGenerator {
 
     console.log(`    ✓ Signal validated: ${signal.toUpperCase()}`);
     return signal;
+  }
+
+  private checkMultipleIndicators(
+    bar: CsvBar,
+    signal: 'bullish' | 'bearish'
+  ): { passed: boolean; reason?: string } {
+    const checks: {
+      name: string;
+      value: number | undefined;
+      enabled: boolean;
+    }[] = [];
+
+    // Add EMA check if configured
+    if (this.indicatorFilters.emaMovingAverage) {
+      const emaKey =
+        `ema_${this.indicatorFilters.emaMovingAverage}` as keyof CsvBar;
+      checks.push({
+        name: `EMA${this.indicatorFilters.emaMovingAverage}`,
+        value: bar[emaKey] as number | undefined,
+        enabled: true,
+      });
+    }
+
+    // Add SMA check if configured
+    if (
+      this.indicatorFilters.smaFilter &&
+      this.indicatorFilters.smaFilter > 0
+    ) {
+      const smaKey = `sma_${this.indicatorFilters.smaFilter}` as keyof CsvBar;
+      checks.push({
+        name: `SMA${this.indicatorFilters.smaFilter}`,
+        value: bar[smaKey] as number | undefined,
+        enabled: true,
+      });
+    }
+
+    // Add VWAP check if enabled
+    if (this.indicatorFilters.useVWAP) {
+      checks.push({
+        name: 'VWAP',
+        value: bar.vwap,
+        enabled: true,
+      });
+    }
+
+    // Filter to only enabled indicators with valid values
+    const activeChecks = checks.filter(
+      (check) => check.enabled && check.value !== undefined
+    );
+
+    // If no indicators are selected, pass the check
+    if (activeChecks.length === 0) {
+      console.log('    → No additional indicator filters active');
+      return { passed: true };
+    }
+
+    console.log(
+      `    → Checking ${activeChecks.length} indicator filter(s) for ${signal} signal:`
+    );
+
+    // Check each active indicator
+    const failedChecks: string[] = [];
+    const passedChecks: string[] = [];
+
+    for (const check of activeChecks) {
+      if (check.value === undefined) continue;
+
+      const priceAbove = bar.close > check.value;
+
+      // For both LONG and SHORT, price must be above all selected indicators
+      if (!priceAbove) {
+        failedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+      } else {
+        passedChecks.push(`${check.name}(${check.value.toFixed(2)})`);
+      }
+    }
+
+    // Log the results
+    if (passedChecks.length > 0) {
+      console.log(
+        `      ✓ Price ${bar.close.toFixed(2)} above: ${passedChecks.join(
+          ', '
+        )}`
+      );
+    }
+    if (failedChecks.length > 0) {
+      console.log(
+        `      ✗ Price ${bar.close.toFixed(2)} below: ${failedChecks.join(
+          ', '
+        )}`
+      );
+    }
+
+    // ALL selected indicators must have price above them
+    if (failedChecks.length > 0) {
+      return {
+        passed: false,
+        reason: `Price below ${failedChecks.join(', ')}`,
+      };
+    }
+
+    return { passed: true };
   }
 }

@@ -1,4 +1,3 @@
-// src/strategy/BacktestEngine.ts
 import { ApiParams, CsvBar } from '../types/types';
 import { PositionManager } from '../core/PositionManager';
 import { SignalGenerator } from '../core/SignalGenerator';
@@ -24,6 +23,7 @@ export class BacktestEngine {
   private pendingSignal: PendingSignal | null = null;
   private lastSignal: 'bullish' | 'bearish' | null = null;
 
+  // src/strategy/BacktestEngine.ts - Updated constructor
   constructor(private formData: ApiParams) {
     this.logger = new BacktestLogger();
     this.positionManager = new PositionManager(
@@ -34,7 +34,14 @@ export class BacktestEngine {
       formData.breakevenTrigger || 3,
       formData.trailDistance || 2
     );
-    this.signalGenerator = new SignalGenerator();
+
+    // Pass indicator filters to SignalGenerator
+    this.signalGenerator = new SignalGenerator({
+      emaMovingAverage: formData.emaMovingAverage,
+      smaFilter: formData.smaFilter,
+      useVWAP: formData.useVWAP,
+    });
+
     this.dailyLimitManager = new DailyLimitManager(
       formData.maxDailyLoss,
       formData.maxDailyProfit
@@ -45,7 +52,6 @@ export class BacktestEngine {
       formData.adxThreshold
     );
   }
-
   async run(csvFiles: string[]): Promise<BacktestResult> {
     // Initialize logging
     this.logger.logTimezoneDiagnostics();
@@ -355,6 +361,29 @@ export class BacktestEngine {
       this.logger.log(
         `🎯 Daily Profit Target: $${this.formData.maxDailyProfit}`
       );
+    }
+
+    // Log indicator filters
+    const activeFilters: string[] = [];
+    if (this.formData.emaMovingAverage && this.formData.emaMovingAverage > 0) {
+      activeFilters.push(`EMA${this.formData.emaMovingAverage}`);
+    }
+    if (this.formData.smaFilter && this.formData.smaFilter > 0) {
+      activeFilters.push(`SMA${this.formData.smaFilter}`);
+    }
+    if (this.formData.useVWAP) {
+      activeFilters.push('VWAP');
+    }
+
+    if (activeFilters.length > 0) {
+      this.logger.log(
+        `📊 Indicator Filters Active: ${activeFilters.join(', ')}`
+      );
+      this.logger.log(
+        `   - All ${activeFilters.length} conditions must be met (price above all)`
+      );
+    } else {
+      this.logger.log(`📊 No additional indicator filters active`);
     }
   }
 }

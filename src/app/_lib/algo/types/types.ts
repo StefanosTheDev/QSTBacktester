@@ -1,6 +1,4 @@
-/**
- * Completed backtest trade record
- */
+// src/types/types.ts
 export interface StrategyTrade {
   type: 'bullish' | 'bearish';
   entryPrice: number;
@@ -12,9 +10,6 @@ export interface StrategyTrade {
   winLoss: 'W' | 'L';
 }
 
-/**
- * Single bar with all precomputed indicators from the CSV
- */
 export interface CsvBar {
   // always present
   timestamp: string;
@@ -30,14 +25,14 @@ export interface CsvBar {
   cvd_high?: number;
   cvd_low?: number;
   cvd_close?: number;
-  cvd_color?: string; // ← ADD THIS
+  cvd_color?: string;
 
   // ADX/DI fields
-  plus_di?: number; // ← ADD THIS (+di from CSV)
-  minus_di?: number; // ← ADD THIS (-di from CSV)
-  dx?: number; // ← ADD THIS
-  adx?: number; // ← ADD THIS
-  adxr?: number; // ← ADD THIS
+  plus_di?: number;
+  minus_di?: number;
+  dx?: number;
+  adx?: number;
+  adxr?: number;
 
   // EMA fields
   ema_8?: number;
@@ -48,12 +43,15 @@ export interface CsvBar {
   ema_50?: number;
   ema_100?: number;
   ema_200?: number;
-}
 
-/**
- * Parameters passed from the frontend to configure the CSV backtest
- */
-// In your types.ts file, update the ApiParams interface:
+  // SMA fields - NEW
+  sma_50?: number;
+  sma_100?: number;
+  sma_200?: number;
+
+  // VWAP - NEW
+  vwap?: number;
+}
 
 export interface ApiParams {
   start: string;
@@ -65,10 +63,14 @@ export interface ApiParams {
   candleType: 'traditional' | 'heikinashi';
   cvdLookBackBars?: number;
 
-  // Indicator Settings
+  // Indicator Settings - Keep existing fields
   emaMovingAverage?: number;
   adxThreshold?: number;
   adxPeriod?: number;
+
+  // NEW - SMA and VWAP filters
+  smaFilter?: number; // Can be 50, 100, or 200
+  useVWAP?: boolean;
 
   // Risk Management
   contractSize: number;
@@ -82,6 +84,7 @@ export interface ApiParams {
   breakevenTrigger?: number;
   trailDistance?: number;
 }
+
 export interface Position {
   type: 'bullish' | 'bearish';
   entryPrice: number;
@@ -97,6 +100,7 @@ export interface TrendlineResult {
   resSlope: number;
   breakout: 'bullish' | 'bearish' | 'none';
 }
+
 export interface TradeRecord {
   entryDate: string;
   entryTime: string;
@@ -112,4 +116,37 @@ export interface TradeRecord {
   profitLoss: number;
   commission: number;
   netProfitLoss: number;
+}
+
+// Form interface for the frontend
+export interface FormProp {
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  timeframe: string;
+
+  barType: 'time' | 'tick';
+  barSize: number;
+  candleType: 'traditional' | 'heikinashi';
+  cvdLookBackBars: number;
+
+  emaMovingAverage: number;
+  adxThreshold: number;
+  adxPeriod: number;
+
+  // NEW - SMA and VWAP filters
+  smaFilter: number; // 0 = off, 50/100/200 = on with that value
+  useVWAP: boolean;
+
+  contractSize: number;
+  stopLoss: number;
+  takeProfit: number;
+
+  maxDailyLoss: number;
+  maxDailyProfit: number;
+
+  useTrailingStop: boolean;
+  breakevenTrigger: number;
+  trailDistance: number;
 }

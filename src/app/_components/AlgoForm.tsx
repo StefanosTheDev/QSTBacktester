@@ -21,13 +21,6 @@ interface TradeRecord {
   netProfitLoss: number;
 }
 
-// Add trailing stop fields to FormProp in your types file
-// interface FormPropExtended {
-//   useTrailingStop?: boolean;
-//   breakevenTrigger?: number;
-//   trailDistance?: number;
-// }
-
 // Define the result type to match your BacktestResult
 interface BacktestResults {
   count: number;
@@ -72,31 +65,33 @@ export default function AlgoForm() {
     barType: 'time',
     barSize: 0,
     candleType: 'traditional',
-    cvdLookBackBars: 5, // Default to 5
+    cvdLookBackBars: 5,
 
-    emaMovingAverage: 0,
+    emaMovingAverage: 0, // Can be any value: 21, 50, 100, 200, etc.
     adxThreshold: 0,
     adxPeriod: 0,
 
-    contractSize: 1, // Default to 1
-    stopLoss: 10, // Default to 10 points
-    takeProfit: 20, // Default to 20 points
+    // NEW - SMA and VWAP filters
+    smaFilter: 0, // 0 = off, 50/100/200 = on with that value
+    useVWAP: false,
 
-    // New daily limit fields
-    maxDailyLoss: 1500, // Default $1500 max daily loss
-    maxDailyProfit: 2000, // Default $2000 max daily profit
+    contractSize: 1,
+    stopLoss: 10,
+    takeProfit: 20,
 
-    // Trailing stop fields
+    maxDailyLoss: 1500,
+    maxDailyProfit: 2000,
+
     useTrailingStop: false,
-    breakevenTrigger: 3, // Move to breakeven after 3 points profit
-    trailDistance: 2, // Trail by 2 points
+    breakevenTrigger: 3,
+    trailDistance: 2,
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<BacktestResults | null>(null);
-  const [lastRunSettings, setLastRunSettings] = useState<FormProp | null>(null); // Store settings from last run
-  const [showForm, setShowForm] = useState(true); // Control form/results view
+  const [lastRunSettings, setLastRunSettings] = useState<FormProp | null>(null);
+  const [showForm, setShowForm] = useState(true);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -136,8 +131,8 @@ export default function AlgoForm() {
           ...data.success,
           intradayStats: data.success.intradayStats || {},
         });
-        setLastRunSettings(values); // Save the settings used for this run
-        setShowForm(false); // Hide form and show results
+        setLastRunSettings(values);
+        setShowForm(false);
       } else {
         throw new Error('Backtest failed: ' + (data.error || 'Unknown error'));
       }
@@ -149,10 +144,6 @@ export default function AlgoForm() {
       console.log('🔚 handleSubmit end');
     }
   };
-
-  // const toggleView = () => {
-  //   setShowForm(!showForm);
-  // };
 
   return (
     <div className="min-h-screen bg-gray-50 py-10">
@@ -312,43 +303,74 @@ export default function AlgoForm() {
                 {/* Indicator Settings */}
                 <div>
                   <h3 className="text-lg font-medium mb-2 text-gray-700">
-                    Indicators
+                    Indicator Filters
                   </h3>
+                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                    <p className="text-sm text-gray-700">
+                      <strong>Important:</strong> When indicators are
+                      configured, price must be ABOVE ALL of them for any trade
+                      (LONG or SHORT).
+                    </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <label className="flex flex-col">
-                      <span className="text-sm text-gray-600">EMA Period</span>
+                      <span className="text-sm text-gray-600">
+                        EMA Period (0 = disabled)
+                      </span>
                       <input
                         type="number"
                         name="emaMovingAverage"
                         value={values.emaMovingAverage || ''}
                         onChange={handleChange}
-                        placeholder="e.g. 21"
+                        placeholder="e.g. 21, 50, 100, 200"
                         min="0"
                         className="mt-1 border rounded px-3 py-2 text-gray-800"
                       />
+                      <span className="text-xs text-gray-500 mt-1">
+                        Enter any EMA period (8, 21, 50, 100, 200, etc.)
+                      </span>
                     </label>
                     <label className="flex flex-col">
-                      <span className="text-sm text-gray-600">ADX Period</span>
-                      <input
-                        type="number"
-                        name="adxPeriod"
-                        value={values.adxPeriod || ''}
+                      <span className="text-sm text-gray-600">SMA Filter</span>
+                      <select
+                        name="smaFilter"
+                        value={values.smaFilter}
                         onChange={handleChange}
-                        placeholder="e.g. 14"
-                        min="0"
                         className="mt-1 border rounded px-3 py-2 text-gray-800"
+                      >
+                        <option value="0">Disabled</option>
+                        <option value="50">SMA 50</option>
+                        <option value="100">SMA 100</option>
+                        <option value="200">SMA 200</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="useVWAP"
+                        checked={values.useVWAP}
+                        onChange={(e) =>
+                          setValues((prev) => ({
+                            ...prev,
+                            useVWAP: e.target.checked,
+                          }))
+                        }
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                       />
+                      <span className="text-sm text-gray-700">
+                        Use VWAP Filter
+                      </span>
                     </label>
                     <label className="flex flex-col">
                       <span className="text-sm text-gray-600">
-                        ADX Threshold
+                        ADX Threshold (0 = disabled)
                       </span>
                       <input
                         type="number"
                         name="adxThreshold"
                         value={values.adxThreshold || ''}
                         onChange={handleChange}
-                        placeholder="e.g. 25"
+                        placeholder="e.g. 10, 25"
                         min="0"
                         className="mt-1 border rounded px-3 py-2 text-gray-800"
                       />
