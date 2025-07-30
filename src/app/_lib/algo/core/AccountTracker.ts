@@ -132,10 +132,22 @@ export class AccountTracker {
   }
 
   private calculateDaysBetween(start: string, end: string): number {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
+    // Parse the timestamps properly
+    const parseTimestamp = (ts: string): Date => {
+      // Handle "YYYY-MM-DD HH:MM:SS AM/PM" format
+      if (ts.includes(' ')) {
+        const parts = ts.split(' ');
+        const datePart = parts[0];
+        return new Date(datePart);
+      }
+      return new Date(ts);
+    };
+
+    const startDate = parseTimestamp(start);
+    const endDate = parseTimestamp(end);
     const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(1, diffDays); // At least 1 day
   }
 
   getAccountSummary(): {

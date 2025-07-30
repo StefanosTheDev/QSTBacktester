@@ -1,5 +1,6 @@
 // components/stats/StatsAccountPerformance.tsx
 import React from 'react';
+import EquityCurveChart from './EquityCurveChart';
 
 interface AccountStats {
   startingBalance: number;
@@ -42,8 +43,11 @@ interface StatsAccountPerformanceProps {
 export default function StatsAccountPerformance({
   accountStats,
   drawdownEvents = [],
-}: // Removed equityCurve since it's not used
-StatsAccountPerformanceProps) {
+  equityCurve = [],
+}: StatsAccountPerformanceProps) {
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const itemsPerPage = 10;
+
   if (!accountStats) {
     return <div>No account data available</div>;
   }
@@ -74,6 +78,14 @@ StatsAccountPerformanceProps) {
 
   return (
     <div className="space-y-6">
+      {/* Equity Curve Chart - NEW */}
+      {equityCurve && equityCurve.length > 0 && (
+        <EquityCurveChart
+          equityCurve={equityCurve}
+          startingBalance={accountStats.startingBalance}
+        />
+      )}
+
       {/* Account Overview */}
       <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-6 rounded-xl border border-gray-200">
         <h3 className="text-2xl font-bold text-gray-800 mb-4">
@@ -210,15 +222,19 @@ StatsAccountPerformanceProps) {
       {/* Drawdown Events Table */}
       {drawdownEvents.length > 0 && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b">
+          <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
             <h4 className="text-lg font-semibold text-gray-800">
               Drawdown History
             </h4>
+            <span className="text-sm text-gray-600">
+              Total: {drawdownEvents.length} drawdowns
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
+                  <th className="text-left p-3">#</th>
                   <th className="text-left p-3">Start Date</th>
                   <th className="text-left p-3">End Date</th>
                   <th className="text-right p-3">Amount</th>
@@ -228,36 +244,89 @@ StatsAccountPerformanceProps) {
                 </tr>
               </thead>
               <tbody>
-                {drawdownEvents.map((event, index) => (
-                  <tr
-                    key={index}
-                    className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-                  >
-                    <td className="p-3">{event.startDate.split(' ')[0]}</td>
-                    <td className="p-3">{event.endDate.split(' ')[0]}</td>
-                    <td className="text-right p-3 text-red-600 font-medium">
-                      {formatCurrency(event.drawdownAmount)}
-                    </td>
-                    <td className="text-right p-3 text-red-600">
-                      {formatPercent(event.drawdownPercent)}
-                    </td>
-                    <td className="text-right p-3">{event.duration} days</td>
-                    <td className="text-center p-3">
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          event.recovered
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {event.recovered ? 'Recovered' : 'Active'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {drawdownEvents
+                  .slice(
+                    (currentPage - 1) * itemsPerPage,
+                    currentPage * itemsPerPage
+                  )
+                  .map((event, index) => (
+                    <tr
+                      key={index}
+                      className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                    >
+                      <td className="p-3">
+                        {(currentPage - 1) * itemsPerPage + index + 1}
+                      </td>
+                      <td className="p-3">{event.startDate.split(' ')[0]}</td>
+                      <td className="p-3">{event.endDate.split(' ')[0]}</td>
+                      <td className="text-right p-3 text-red-600 font-medium">
+                        {formatCurrency(event.drawdownAmount)}
+                      </td>
+                      <td className="text-right p-3 text-red-600">
+                        {formatPercent(event.drawdownPercent)}
+                      </td>
+                      <td className="text-right p-3">{event.duration} days</td>
+                      <td className="text-center p-3">
+                        <span
+                          className={`px-2 py-1 rounded text-xs ${
+                            event.recovered
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {event.recovered ? 'Recovered' : 'Active'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {drawdownEvents.length > itemsPerPage && (
+            <div className="p-4 border-t flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                Showing{' '}
+                {Math.min(
+                  (currentPage - 1) * itemsPerPage + 1,
+                  drawdownEvents.length
+                )}{' '}
+                - {Math.min(currentPage * itemsPerPage, drawdownEvents.length)}{' '}
+                of {drawdownEvents.length}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1 text-sm">
+                  Page {currentPage} of{' '}
+                  {Math.ceil(drawdownEvents.length / itemsPerPage)}
+                </span>
+                <button
+                  onClick={() =>
+                    setCurrentPage(
+                      Math.min(
+                        Math.ceil(drawdownEvents.length / itemsPerPage),
+                        currentPage + 1
+                      )
+                    )
+                  }
+                  disabled={
+                    currentPage >=
+                    Math.ceil(drawdownEvents.length / itemsPerPage)
+                  }
+                  className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
