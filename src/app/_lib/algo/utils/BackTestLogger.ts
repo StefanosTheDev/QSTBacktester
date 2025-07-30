@@ -3,9 +3,43 @@ import { DateTime } from 'luxon';
 
 export class BacktestLogger {
   private logs: string[] = [];
+  private originalConsoleLog: typeof console.log;
+  private isCapturing: boolean = false;
 
   constructor() {
     this.logs = [];
+    this.originalConsoleLog = console.log;
+  }
+
+  // Start capturing console.log outputs
+  startCapture(): void {
+    if (this.isCapturing) return;
+
+    this.isCapturing = true;
+    const self = this;
+
+    // Override console.log
+    console.log = function (...args: any[]) {
+      // Call original console.log
+      self.originalConsoleLog.apply(console, args);
+
+      // Capture to our logs
+      const message = args
+        .map((arg) =>
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        )
+        .join(' ');
+
+      self.logs.push(message);
+    };
+  }
+
+  // Stop capturing and restore original console.log
+  stopCapture(): void {
+    if (!this.isCapturing) return;
+
+    console.log = this.originalConsoleLog;
+    this.isCapturing = false;
   }
 
   // Timezone diagnostics
@@ -140,5 +174,18 @@ export class BacktestLogger {
   // Get all logs
   getLogs(): string[] {
     return this.logs;
+  }
+
+  // Format logs for display
+  getFormattedLogs(): string[] {
+    return this.logs.map((log) => {
+      // Add color coding based on log type
+      if (log.includes('→')) return log; // Signal analysis logs
+      if (log.includes('✓')) return log; // Validation logs
+      if (log.includes('✗')) return log; // Filter logs
+      if (log.includes('📊')) return log; // Trade logs
+      if (log.includes('🔍')) return log; // Debug logs
+      return log;
+    });
   }
 }

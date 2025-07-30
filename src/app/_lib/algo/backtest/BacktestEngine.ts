@@ -55,20 +55,28 @@ export class BacktestEngine {
   }
 
   async run(csvFiles: string[]): Promise<BacktestResult> {
-    // Initialize logging
-    this.logger.logTimezoneDiagnostics();
-    this.logConfiguration();
+    // Start capturing console.log outputs
+    this.logger.startCapture();
 
-    // Process bars
-    const processResult = await this.barProcessor.processBars(
-      csvFiles,
-      this.formData.start,
-      this.formData.end,
-      (bar, prevBar, isFirstBar) => this.processBar(bar, prevBar, isFirstBar)
-    );
+    try {
+      // Initialize logging
+      this.logger.logTimezoneDiagnostics();
+      this.logConfiguration();
 
-    // Generate final results
-    return this.generateResults(processResult.count);
+      // Process bars
+      const processResult = await this.barProcessor.processBars(
+        csvFiles,
+        this.formData.start,
+        this.formData.end,
+        (bar, prevBar, isFirstBar) => this.processBar(bar, prevBar, isFirstBar)
+      );
+
+      // Generate final results
+      return this.generateResults(processResult.count);
+    } finally {
+      // Stop capturing console.log outputs
+      this.logger.stopCapture();
+    }
   }
 
   private processBar(
