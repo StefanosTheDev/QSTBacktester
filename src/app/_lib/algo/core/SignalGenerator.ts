@@ -50,6 +50,7 @@ export class SignalGenerator {
         }`
       );
     }
+
     // 1. Reversal filter - wait for opposite signal
     if (signal === lastSignal) {
       console.log(`    → filtered: waiting for reversal from ${lastSignal}`);
@@ -120,20 +121,31 @@ export class SignalGenerator {
       console.log(`    → ADX passed: ${adxValue.toFixed(2)} > ${adxThreshold}`);
     }
 
-    // 7. CVD color confirmation (if available)
-    if (bar.cvd_color) {
-      if (signal === 'bullish' && bar.cvd_color === 'red') {
+    // 7. CVD color confirmation - STRICT REQUIREMENT (FIXED)
+    // MUST have matching CVD color - NO NEUTRAL ALLOWED
+    if (!bar.cvd_color) {
+      console.log(
+        '    → filtered: CVD color data missing - cannot confirm direction'
+      );
+      return 'none';
+    }
+
+    if (signal === 'bullish') {
+      if (bar.cvd_color !== 'green') {
         console.log(
-          '    → filtered: bullish signal but CVD showing selling (red)'
+          `    → filtered: LONG signal requires GREEN CVD bar, but got ${bar.cvd_color}`
         );
         return 'none';
       }
-      if (signal === 'bearish' && bar.cvd_color === 'green') {
+      console.log('    → CVD confirmation: GREEN bar for LONG ✓');
+    } else if (signal === 'bearish') {
+      if (bar.cvd_color !== 'red') {
         console.log(
-          '    → filtered: bearish signal but CVD showing buying (green)'
+          `    → filtered: SHORT signal requires RED CVD bar, but got ${bar.cvd_color}`
         );
         return 'none';
       }
+      console.log('    → CVD confirmation: RED bar for SHORT ✓');
     }
 
     console.log(`    ✓ Signal validated: ${signal.toUpperCase()}`);
