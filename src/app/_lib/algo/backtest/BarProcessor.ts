@@ -53,11 +53,11 @@ export class BarProcessor {
     let isFirstBar = true;
     let firstAdxFound = false; // Track if we've seen any ADX value
 
-    const filterParams = {
-      emaMovingAverage: this.emaMovingAverage,
-      adxThreshold: this.adxThreshold,
-      cvdLookBackBars: this.cvdLookBackBars,
-    };
+    // const filterParams = {
+    //   emaMovingAverage: this.emaMovingAverage,
+    //   adxThreshold: this.adxThreshold,
+    //   cvdLookBackBars: this.cvdLookBackBars,
+    // };
 
     for await (const bar of streamCsvBars(csvFiles, start, end)) {
       this.barCount++; // Track total bars
