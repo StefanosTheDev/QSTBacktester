@@ -18,6 +18,33 @@ export default function StatsDailyPnL({
       currency: 'USD',
     }).format(amount);
 
+  // FIXED: Parse date string without using Date object
+  const parseDateString = (
+    dateStr: string
+  ): { month: number; day: number; year: number; comparable: number } => {
+    // Handle MM/DD/YYYY format
+    if (dateStr.includes('/')) {
+      const [month, day, year] = dateStr.split('/').map(Number);
+      return {
+        month,
+        day,
+        year,
+        comparable: year * 10000 + month * 100 + day,
+      };
+    }
+    // Handle YYYY-MM-DD format (shouldn't happen but just in case)
+    else if (dateStr.includes('-')) {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return {
+        year,
+        month,
+        day,
+        comparable: year * 10000 + month * 100 + day,
+      };
+    }
+    throw new Error(`Cannot parse date: ${dateStr}`);
+  };
+
   return (
     <div className="space-y-4">
       <h4 className="text-lg font-semibold text-gray-800">
@@ -45,20 +72,10 @@ export default function StatsDailyPnL({
             <tbody>
               {Object.entries(statistics.dailyPnL)
                 .sort(([a], [b]) => {
-                  // Parse MM/DD/YYYY format for proper sorting
-                  const [aMonth, aDay, aYear] = a.split('/');
-                  const [bMonth, bDay, bYear] = b.split('/');
-                  const aDate = new Date(
-                    parseInt(aYear),
-                    parseInt(aMonth) - 1,
-                    parseInt(aDay)
-                  );
-                  const bDate = new Date(
-                    parseInt(bYear),
-                    parseInt(bMonth) - 1,
-                    parseInt(bDay)
-                  );
-                  return aDate.getTime() - bDate.getTime();
+                  // FIXED: Sort using manual date parsing
+                  const aDate = parseDateString(a);
+                  const bDate = parseDateString(b);
+                  return aDate.comparable - bDate.comparable;
                 })
                 .reduce((acc, [date, pnl], index) => {
                   const cumulative =

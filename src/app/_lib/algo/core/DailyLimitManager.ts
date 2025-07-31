@@ -21,7 +21,7 @@ export class DailyLimitManager {
     this.maxDailyProfit = maxDailyProfit || Infinity;
   }
 
-  // Consistent date key function that works with the timestamp format from CSV
+  // FIXED: Consistent date key function that NEVER uses Date objects
   private getDateKey(timestamp: string): string {
     // The timestamp is like "2025-01-15 09:30:00 AM"
     // Extract just the date part and convert to MM/DD/YYYY format
@@ -32,12 +32,9 @@ export class DailyLimitManager {
       return `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
     }
 
-    // Fallback: if timestamp is already in MM/DD/YYYY format or other format
-    const date = new Date(timestamp);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${month}/${day}/${year}`;
+    // If we get here, the timestamp format is unexpected
+    console.error('Unexpected timestamp format:', timestamp);
+    throw new Error(`Cannot parse timestamp: ${timestamp}`);
   }
 
   // Check if trading is allowed for the current timestamp
@@ -169,12 +166,14 @@ export class DailyLimitManager {
 
   getDailyStats(): DailyStats[] {
     return Array.from(this.dailyStats.values()).sort((a, b) => {
-      // Parse MM/DD/YYYY format for proper sorting
-      const [aMonth, aDay, aYear] = a.date.split('/').map((n) => parseInt(n));
-      const [bMonth, bDay, bYear] = b.date.split('/').map((n) => parseInt(n));
-      const aDate = new Date(aYear, aMonth - 1, aDay);
-      const bDate = new Date(bYear, bMonth - 1, bDay);
-      return aDate.getTime() - bDate.getTime();
+      // FIXED: Parse MM/DD/YYYY format WITHOUT using Date objects
+      const parseDate = (dateStr: string) => {
+        const [month, day, year] = dateStr.split('/').map((n) => parseInt(n));
+        // Return a comparable number: YYYYMMDD
+        return year * 10000 + month * 100 + day;
+      };
+
+      return parseDate(a.date) - parseDate(b.date);
     });
   }
 

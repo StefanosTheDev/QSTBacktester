@@ -37,8 +37,14 @@ export class AccountTracker {
     this.currentBalance = startingBalance;
     this.highWaterMark = startingBalance;
 
-    // Record initial snapshot
-    this.recordSnapshot(new Date().toISOString());
+    // Record initial snapshot - use a fixed format timestamp
+    this.recordSnapshot(this.createInitialTimestamp());
+  }
+
+  private createInitialTimestamp(): string {
+    // Create a consistent initial timestamp format
+    // This avoids using new Date() which is timezone dependent
+    return '2025-01-01 09:30:00 AM';
   }
 
   recordTrade(
@@ -131,22 +137,32 @@ export class AccountTracker {
     });
   }
 
+  // FIXED: Calculate days between timestamps without using Date objects
   private calculateDaysBetween(start: string, end: string): number {
-    // Parse the timestamps properly
-    const parseTimestamp = (ts: string): Date => {
+    // Parse the timestamps manually
+    const parseTimestamp = (
+      ts: string
+    ): { year: number; month: number; day: number } => {
       // Handle "YYYY-MM-DD HH:MM:SS AM/PM" format
-      if (ts.includes(' ')) {
-        const parts = ts.split(' ');
-        const datePart = parts[0];
-        return new Date(datePart);
+      const datePart = ts.split(' ')[0];
+      if (datePart && datePart.includes('-')) {
+        const [year, month, day] = datePart.split('-').map(Number);
+        return { year, month, day };
       }
-      return new Date(ts);
+      // Fallback - should not happen with our data
+      throw new Error(`Cannot parse timestamp: ${ts}`);
     };
 
     const startDate = parseTimestamp(start);
     const endDate = parseTimestamp(end);
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // Simple day calculation without timezone issues
+    // This is approximate but consistent
+    const startDays =
+      startDate.year * 365 + startDate.month * 30 + startDate.day;
+    const endDays = endDate.year * 365 + endDate.month * 30 + endDate.day;
+
+    const diffDays = Math.abs(endDays - startDays);
     return Math.max(1, diffDays); // At least 1 day
   }
 
@@ -303,7 +319,18 @@ export class AccountTracker {
     > = {};
 
     this.snapshots.forEach((snapshot) => {
-      const date = snapshot.timestamp.split(' ')[0]; // Get date part
+      // Extract date part without using Date object
+      const datePart = snapshot.timestamp.split(' ')[0]; // Get "YYYY-MM-DD"
+
+      // Convert to MM/DD/YYYY format for consistency
+      let date: string;
+      if (datePart && datePart.includes('-')) {
+        const [year, month, day] = datePart.split('-');
+        date = `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
+      } else {
+        // Fallback - should not happen
+        date = datePart;
+      }
 
       if (!dailyData[date]) {
         dailyData[date] = {

@@ -52,21 +52,107 @@ export default function StatsCardView({
       currency: 'USD',
     }).format(amount);
 
-  // Helper function to parse date from various formats
-  const parseDate = (dateStr: string): Date => {
-    // Try different date formats
-    // Format 1: "MM/DD/YYYY" (most common from your data)
+  // FIXED: Helper function to parse date WITHOUT using Date object
+  const parseDate = (
+    dateStr: string
+  ): { year: number; month: number; day: number; comparable: number } => {
+    // Handle "MM/DD/YYYY" format
     if (dateStr.includes('/')) {
       const [month, day, year] = dateStr.split('/').map((p) => parseInt(p));
-      return new Date(year, month - 1, day);
+      return {
+        year,
+        month,
+        day,
+        comparable: year * 10000 + month * 100 + day,
+      };
     }
-    // Format 2: "YYYY-MM-DD"
+    // Handle "YYYY-MM-DD" format
     else if (dateStr.includes('-')) {
       const [year, month, day] = dateStr.split('-').map((p) => parseInt(p));
-      return new Date(year, month - 1, day);
+      return {
+        year,
+        month,
+        day,
+        comparable: year * 10000 + month * 100 + day,
+      };
     }
     // Fallback
-    return new Date(dateStr);
+    throw new Error(`Cannot parse date: ${dateStr}`);
+  };
+
+  // FIXED: Get day of week without Date object (0 = Sunday, 6 = Saturday)
+  const getDayOfWeek = (year: number, month: number, day: number): number => {
+    // Zeller's congruence algorithm
+    const m = month < 3 ? month + 12 : month;
+    const y = month < 3 ? year - 1 : year;
+    const k = y % 100;
+    const j = Math.floor(y / 100);
+    const h =
+      (day +
+        Math.floor((13 * (m + 1)) / 5) +
+        k +
+        Math.floor(k / 4) +
+        Math.floor(j / 4) -
+        2 * j) %
+      7;
+    return (h + 6) % 7; // Convert to 0 = Sunday
+  };
+
+  // FIXED: Format date for display
+  const formatDateDisplay = (
+    year: number,
+    month: number,
+    day: number,
+    format: 'full' | 'month' | 'short'
+  ): string => {
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    const monthNamesShort = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    const dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+
+    switch (format) {
+      case 'full':
+        return `${monthNames[month - 1]} ${day}, ${year}`;
+      case 'month':
+        return monthNames[month - 1];
+      case 'short':
+        return `${monthNamesShort[month - 1]} ${day}`;
+      default:
+        return `${month}/${day}/${year}`;
+    }
   };
 
   // Group data by month with proper date parsing
@@ -87,17 +173,22 @@ export default function StatsCardView({
     > = {};
 
     Object.entries(statistics.dailyPnL).forEach(([dateStr, pnl]) => {
-      const date = parseDate(dateStr);
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
-      const monthKey = `${year}-${month.toString().padStart(2, '0')}`;
-      const monthName = date.toLocaleDateString('en-US', { month: 'long' });
+      const parsed = parseDate(dateStr);
+      const monthKey = `${parsed.year}-${parsed.month
+        .toString()
+        .padStart(2, '0')}`;
+      const monthName = formatDateDisplay(
+        parsed.year,
+        parsed.month,
+        1,
+        'month'
+      );
 
       if (!months[monthKey]) {
         months[monthKey] = {
           monthKey,
           monthName,
-          year,
+          year: parsed.year,
           days: [],
           totalPnL: 0,
           tradingDays: 0,
@@ -130,8 +221,8 @@ export default function StatsCardView({
       string,
       {
         weekKey: string;
-        weekStart: Date;
-        weekEnd: Date;
+        weekStart: { year: number; month: number; day: number };
+        weekEnd: { year: number; month: number; day: number };
         weekLabel: string;
         weekNumber: number;
         days: string[];
@@ -148,31 +239,69 @@ export default function StatsCardView({
 
     // Sort days chronologically first
     const sortedDays = [...monthDays].sort((a, b) => {
-      return parseDate(a).getTime() - parseDate(b).getTime();
+      const aDate = parseDate(a);
+      const bDate = parseDate(b);
+      return aDate.comparable - bDate.comparable;
     });
 
     sortedDays.forEach((dateStr) => {
-      const date = parseDate(dateStr);
+      const parsed = parseDate(dateStr);
+      const dayOfWeek = getDayOfWeek(parsed.year, parsed.month, parsed.day);
 
-      // Get start of week (Sunday)
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay());
+      // Calculate start of week (Sunday)
+      let weekStartDay = parsed.day - dayOfWeek;
+      let weekStartMonth = parsed.month;
+      let weekStartYear = parsed.year;
+
+      // Handle month boundary
+      if (weekStartDay < 1) {
+        weekStartMonth--;
+        if (weekStartMonth < 1) {
+          weekStartMonth = 12;
+          weekStartYear--;
+        }
+        // Get days in previous month
+        const daysInPrevMonth = new Date(
+          weekStartYear,
+          weekStartMonth,
+          0
+        ).getDate();
+        weekStartDay = daysInPrevMonth + weekStartDay;
+      }
 
       // Get week number in month
-      const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-      const weekNumber = Math.ceil(
-        (weekStart.getDate() + firstDayOfMonth.getDay()) / 7
-      );
+      const firstDayOfMonth = getDayOfWeek(parsed.year, parsed.month, 1);
+      const weekNumber = Math.ceil((parsed.day + firstDayOfMonth) / 7);
 
-      const weekKey = weekStart.toISOString().split('T')[0];
+      const weekKey = `${weekStartYear}-${weekStartMonth
+        .toString()
+        .padStart(2, '0')}-${weekStartDay.toString().padStart(2, '0')}`;
 
       if (!weeks[weekKey]) {
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
+        const weekEnd = {
+          year: weekStartYear,
+          month: weekStartMonth,
+          day: weekStartDay + 6,
+        };
+
+        // Handle month boundary for week end
+        const daysInMonth = new Date(weekEnd.year, weekEnd.month, 0).getDate();
+        if (weekEnd.day > daysInMonth) {
+          weekEnd.day = weekEnd.day - daysInMonth;
+          weekEnd.month++;
+          if (weekEnd.month > 12) {
+            weekEnd.month = 1;
+            weekEnd.year++;
+          }
+        }
 
         weeks[weekKey] = {
           weekKey,
-          weekStart,
+          weekStart: {
+            year: weekStartYear,
+            month: weekStartMonth,
+            day: weekStartDay,
+          },
           weekEnd,
           weekLabel: `Week ${weekNumber}`,
           weekNumber,
@@ -302,15 +431,19 @@ export default function StatsCardView({
         {data.weekLabel}
       </h3>
       <p className="text-sm text-gray-500 mb-4">
-        {data.weekStart.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        })}{' '}
-        -
-        {data.weekEnd.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        })}
+        {formatDateDisplay(
+          data.weekStart.year,
+          data.weekStart.month,
+          data.weekStart.day,
+          'short'
+        )}
+        {' - '}
+        {formatDateDisplay(
+          data.weekEnd.year,
+          data.weekEnd.month,
+          data.weekEnd.day,
+          'short'
+        )}
       </p>
 
       <div
@@ -355,7 +488,17 @@ export default function StatsCardView({
     const pnl = statistics.dailyPnL[dateStr];
     const dayTrades = trades.filter((t) => t.exitDate === dateStr);
     const stats = intradayStats[dateStr] || { maxHigh: 0, maxLow: 0 };
-    const date = parseDate(dateStr);
+    const parsed = parseDate(dateStr);
+    const dayOfWeek = getDayOfWeek(parsed.year, parsed.month, parsed.day);
+    const dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
 
     return (
       <div
@@ -364,14 +507,10 @@ export default function StatsCardView({
       >
         <div className="mb-4">
           <h3 className="text-xl font-bold text-gray-800">
-            {date.toLocaleDateString('en-US', { weekday: 'long' })}
+            {dayNames[dayOfWeek]}
           </h3>
           <p className="text-gray-500">
-            {date.toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            })}
+            {formatDateDisplay(parsed.year, parsed.month, parsed.day, 'full')}
           </p>
         </div>
 
@@ -585,7 +724,9 @@ export default function StatsCardView({
         {viewLevel === 'day' &&
           getDaysToDisplay()
             .sort((a, b) => {
-              return parseDate(a).getTime() - parseDate(b).getTime();
+              const aDate = parseDate(a);
+              const bDate = parseDate(b);
+              return aDate.comparable - bDate.comparable;
             })
             .map((dateStr) => renderDayCard(dateStr))}
       </div>
