@@ -59,7 +59,7 @@ export class BarProcessor {
       cvdLookBackBars: this.cvdLookBackBars,
     };
 
-    for await (const bar of streamCsvBars(csvFiles, start, end, filterParams)) {
+    for await (const bar of streamCsvBars(csvFiles, start, end)) {
       this.barCount++; // Track total bars
 
       // Calculate ADX for every bar
