@@ -23,15 +23,38 @@ export default function EquityCurveChart({
     return <div>No equity data available</div>;
   }
 
+  // Group equity data by day and get end-of-day values
+  const dailyEquityMap = new Map<string, EquityData>();
+
+  equityCurve.forEach((point) => {
+    // Extract date from timestamp (assuming EST display format)
+    const date = point.timestamp.split(' ')[0]; // Gets "MM/DD/YYYY" part
+
+    // Keep the last (end-of-day) value for each date
+    dailyEquityMap.set(date, point);
+  });
+
+  // Convert to array and sort by date
+  const dailyEquity = Array.from(dailyEquityMap.entries())
+    .sort((a, b) => {
+      // Parse MM/DD/YYYY format for sorting
+      const [aMonth, aDay, aYear] = a[0].split('/').map(Number);
+      const [bMonth, bDay, bYear] = b[0].split('/').map(Number);
+      const aDate = aYear * 10000 + aMonth * 100 + aDay;
+      const bDate = bYear * 10000 + bMonth * 100 + bDay;
+      return aDate - bDate;
+    })
+    .map(([date, data]) => ({ date, ...data }));
+
   // Calculate chart dimensions and scaling
-  const padding = { top: 20, right: 60, bottom: 40, left: 80 };
+  const padding = { top: 20, right: 60, bottom: 60, left: 80 };
   const width = 1200;
   const height = 400;
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
   // Find min and max values for scaling
-  const balances = equityCurve.map((d) => d.balance);
+  const balances = dailyEquity.map((d) => d.balance);
   const minBalance = Math.min(...balances, startingBalance);
   const maxBalance = Math.max(...balances, startingBalance);
   const balanceRange = maxBalance - minBalance;
@@ -40,32 +63,17 @@ export default function EquityCurveChart({
 
   // Create scales
   const xScale = (index: number) =>
-    (index / (equityCurve.length - 1)) * chartWidth;
+    (index / (dailyEquity.length - 1)) * chartWidth;
   const yScale = (value: number) =>
     chartHeight - ((value - paddedMin) / (paddedMax - paddedMin)) * chartHeight;
 
   // Create path for the equity curve
-  const pathData = equityCurve
+  const pathData = dailyEquity
     .map(
       (point, i) =>
         `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(point.balance)}`
     )
     .join(' ');
-
-  // Create path for drawdown areas
-  //   const drawdownPath =
-  //     equityCurve
-  //       .map((point, i) => {
-  //         const y = yScale(point.balance);
-  //         const baseline = yScale(startingBalance);
-  //         return `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${
-  //           point.balance < startingBalance ? y : baseline
-  //         }`;
-  //       })
-  //       .join(' ') +
-  //     ` L ${xScale(equityCurve.length - 1)} ${yScale(startingBalance)} L ${xScale(
-  //       0
-  //     )} ${yScale(startingBalance)} Z`;
 
   // Format currency
   const formatCurrency = (value: number) =>
@@ -83,9 +91,15 @@ export default function EquityCurveChart({
     yTicks.push({ value, y: yScale(value) });
   }
 
+  // Calculate X-axis labels (show every Nth date to avoid crowding)
+  const xLabelInterval = Math.ceil(dailyEquity.length / 10); // Show ~10 labels
+  const xLabels = dailyEquity.filter(
+    (_, i) => i % xLabelInterval === 0 || i === dailyEquity.length - 1
+  );
+
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg">
-      <h3 className="text-xl font-bold mb-4">Account Equity Curve</h3>
+      <h3 className="text-xl font-bold mb-4">Daily Account Equity</h3>
 
       <div className="relative overflow-x-auto">
         <svg width={width} height={height} className="min-w-full">
@@ -119,7 +133,7 @@ export default function EquityCurveChart({
           <path
             d={
               `M ${padding.left} ${yScale(startingBalance) + padding.top} ` +
-              equityCurve
+              dailyEquity
                 .map(
                   (point, i) =>
                     `L ${xScale(i) + padding.left} ${
@@ -139,7 +153,7 @@ export default function EquityCurveChart({
           <path
             d={
               `M ${padding.left} ${yScale(startingBalance) + padding.top} ` +
-              equityCurve
+              dailyEquity
                 .map(
                   (point, i) =>
                     `L ${xScale(i) + padding.left} ${
@@ -165,7 +179,7 @@ export default function EquityCurveChart({
           />
 
           {/* Interactive points */}
-          {equityCurve.map((point, i) => (
+          {dailyEquity.map((point, i) => (
             <circle
               key={i}
               cx={xScale(i) + padding.left}
@@ -194,44 +208,99 @@ export default function EquityCurveChart({
             ))}
           </g>
 
+          {/* X-axis labels */}
+          <g className="text-gray-600">
+            {xLabels.map((label, labelIndex) => {
+              const actualIndex = dailyEquity.findIndex(
+                (d) => d.date === label.date
+              );
+              return (
+                <text
+                  key={labelIndex}
+                  x={xScale(actualIndex) + padding.left}
+                  y={height - padding.bottom + 20}
+                  textAnchor="middle"
+                  className="text-xs"
+                  transform={`rotate(-45, ${
+                    xScale(actualIndex) + padding.left
+                  }, ${height - padding.bottom + 20})`}
+                >
+                  {label.date}
+                </text>
+              );
+            })}
+          </g>
+
           {/* Labels */}
           <text
             x={padding.left}
             y={padding.top - 5}
             className="text-sm font-medium text-gray-700"
           >
-            Account Balance
+            Account Balance ($)
           </text>
 
           {/* Tooltip */}
           {hoveredPoint !== null && (
             <g>
               <rect
-                x={xScale(hoveredPoint) + padding.left - 60}
-                y={yScale(equityCurve[hoveredPoint].balance) + padding.top - 40}
-                width="120"
-                height="35"
+                x={Math.min(
+                  xScale(hoveredPoint) + padding.left - 80,
+                  width - 180
+                )}
+                y={yScale(dailyEquity[hoveredPoint].balance) + padding.top - 50}
+                width="160"
+                height="45"
                 fill="white"
                 stroke="#E5E7EB"
                 strokeWidth="1"
                 rx="4"
+                style={{ filter: 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1))' }}
               />
               <text
-                x={xScale(hoveredPoint) + padding.left}
-                y={yScale(equityCurve[hoveredPoint].balance) + padding.top - 20}
+                x={
+                  Math.min(
+                    xScale(hoveredPoint) + padding.left - 80,
+                    width - 180
+                  ) + 80
+                }
+                y={yScale(dailyEquity[hoveredPoint].balance) + padding.top - 30}
                 textAnchor="middle"
                 className="text-xs font-medium"
               >
-                {formatCurrency(equityCurve[hoveredPoint].balance)}
+                {dailyEquity[hoveredPoint].date}
               </text>
               <text
-                x={xScale(hoveredPoint) + padding.left}
-                y={yScale(equityCurve[hoveredPoint].balance) + padding.top - 8}
+                x={
+                  Math.min(
+                    xScale(hoveredPoint) + padding.left - 80,
+                    width - 180
+                  ) + 80
+                }
+                y={yScale(dailyEquity[hoveredPoint].balance) + padding.top - 15}
                 textAnchor="middle"
-                className="text-xs text-gray-500"
+                className="text-sm font-bold"
               >
-                Trade #{hoveredPoint + 1}
+                {formatCurrency(dailyEquity[hoveredPoint].balance)}
               </text>
+              {dailyEquity[hoveredPoint].drawdownPercent > 0 && (
+                <text
+                  x={
+                    Math.min(
+                      xScale(hoveredPoint) + padding.left - 80,
+                      width - 180
+                    ) + 80
+                  }
+                  y={
+                    yScale(dailyEquity[hoveredPoint].balance) + padding.top - 2
+                  }
+                  textAnchor="middle"
+                  className="text-xs text-red-600"
+                >
+                  -{dailyEquity[hoveredPoint].drawdownPercent.toFixed(1)}%
+                  drawdown
+                </text>
+              )}
             </g>
           )}
         </svg>
@@ -247,12 +316,12 @@ export default function EquityCurveChart({
           <span className="text-sm text-gray-600">Current</span>
           <div
             className={`font-bold ${
-              equityCurve[equityCurve.length - 1].balance >= startingBalance
+              dailyEquity[dailyEquity.length - 1].balance >= startingBalance
                 ? 'text-green-600'
                 : 'text-red-600'
             }`}
           >
-            {formatCurrency(equityCurve[equityCurve.length - 1].balance)}
+            {formatCurrency(dailyEquity[dailyEquity.length - 1].balance)}
           </div>
         </div>
         <div>
@@ -267,6 +336,11 @@ export default function EquityCurveChart({
             {formatCurrency(Math.max(...balances))}
           </div>
         </div>
+      </div>
+
+      {/* Days summary */}
+      <div className="text-sm text-gray-600 mt-2">
+        Showing {dailyEquity.length} trading days
       </div>
     </div>
   );
