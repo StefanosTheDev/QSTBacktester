@@ -1,4 +1,4 @@
-// src/app/_lib/algo/core/PositionManager.ts - FINAL FIXED VERSION
+// src/app/_lib/algo/core/PositionManager.ts - Updated sections only
 import { CsvBar, StrategyTrade } from '../types/types';
 import {
   ExtendedPosition,
@@ -146,6 +146,9 @@ export class PositionManager {
     return result;
   }
 
+  /**
+   * UPDATED: Create trade record with PST → EST conversion
+   */
   private createTradeRecord(
     exitBar: CsvBar,
     exitPrice: number,
@@ -178,11 +181,11 @@ export class PositionManager {
     }
 
     return {
-      entryDate: entryEST.date,
-      entryTime: entryEST.time,
+      entryDate: entryEST.date, // Now in EST
+      entryTime: entryEST.time, // Now in EST
       entryPrice: this.position.entryPrice,
-      exitDate: exitEST.date,
-      exitTime: exitEST.time,
+      exitDate: exitEST.date, // Now in EST
+      exitTime: exitEST.time, // Now in EST
       exitPrice: exitPrice,
       type: this.position.type === 'bullish' ? 'LONG' : 'SHORT',
       contracts: this.contractSize,

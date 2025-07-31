@@ -1,3 +1,4 @@
+// src/app/_components/AlgoForm.tsx
 'use client';
 import React, { useState, FormEvent } from 'react';
 import { FormProp } from '../types/types';
@@ -38,6 +39,33 @@ interface BacktestResults {
     daysHitStop?: number;
     daysHitTarget?: number;
     totalTradingDays?: number;
+    accountStats?: {
+      startingBalance: number;
+      finalBalance: number;
+      totalReturn: number;
+      totalReturnPercent: number;
+      maxDrawdown: number;
+      maxDrawdownPercent: number;
+      maxDrawdownDuration: number;
+      currentDrawdown: number;
+      currentDrawdownPercent: number;
+      highWaterMark: number;
+      lowestBalance: number;
+      returnToDrawdownRatio: number;
+      numberOfDrawdowns: number;
+    };
+    longShortStats?: {
+      longTrades: number;
+      longWins: number;
+      longLosses: number;
+      longWinRate: number;
+      shortTrades: number;
+      shortWins: number;
+      shortLosses: number;
+      shortWinRate: number;
+      longAvgProfit: number;
+      shortAvgProfit: number;
+    };
   };
   trades?: TradeRecord[];
   intradayStats?: Record<
@@ -55,11 +83,22 @@ interface BacktestResults {
 export default function AlgoForm() {
   const today = new Date().toISOString().slice(0, 10);
 
+  // Helper function to show EST equivalent
+  const getESTTime = (pstTime: string): string => {
+    if (!pstTime) return '';
+    const [hours, minutes] = pstTime.split(':').map(Number);
+    const estHours = (hours + 3) % 24;
+    return `${String(estHours).padStart(2, '0')}:${String(minutes).padStart(
+      2,
+      '0'
+    )}`;
+  };
+
   const [values, setValues] = useState<FormProp>({
     startDate: today,
-    startTime: '09:30',
+    startTime: '06:30', // 6:30 AM PST = 9:30 AM EST
     endDate: today,
-    endTime: '16:00',
+    endTime: '13:00', // 1:00 PM PST = 4:00 PM EST
     timeframe: '1min',
 
     barType: 'time',
@@ -67,11 +106,10 @@ export default function AlgoForm() {
     candleType: 'traditional',
     cvdLookBackBars: 5,
 
-    emaMovingAverage: 0, // Can be any value: 21, 50, 100, 200, etc.
+    emaMovingAverage: 0,
     adxThreshold: 0,
 
-    // NEW - SMA and VWAP filters
-    smaFilter: 0, // 0 = off, 50/100/200 = on with that value
+    smaFilter: 0,
     useVWAP: false,
 
     contractSize: 1,
@@ -104,9 +142,6 @@ export default function AlgoForm() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log('▶ handleSubmit start');
-    console.log('📤 Sending values:', values); // ADD THIS LINE
-
     setLoading(true);
     setError(null);
 
@@ -117,7 +152,6 @@ export default function AlgoForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      console.log('📥 Response status:', res.status);
 
       if (!res.ok) {
         const text = await res.text();
@@ -125,7 +159,6 @@ export default function AlgoForm() {
       }
 
       const data = await res.json();
-      console.log('📊 Backtest results:', data);
 
       if (data.success) {
         setResults({
@@ -142,7 +175,6 @@ export default function AlgoForm() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
-      console.log('🔚 handleSubmit end');
     }
   };
 
@@ -186,12 +218,66 @@ export default function AlgoForm() {
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">
                 Algorithm Settings
               </h2>
+
+              {/* Timezone Notice */}
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+                <p className="text-sm text-blue-800">
+                  <strong>📍 Time Zone:</strong> All times should be entered in{' '}
+                  <strong>PST (Pacific Standard Time)</strong> to match the CSV
+                  data files. The results will be displayed in EST (Eastern
+                  Standard Time).
+                </p>
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Date & Time */}
                 <div>
                   <h3 className="text-lg font-medium mb-2 text-gray-700">
                     Time Range
                   </h3>
+                  {/* Quick preset buttons */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValues((prev) => ({
+                          ...prev,
+                          startTime: '06:30', // 9:30 AM EST
+                          endTime: '13:00', // 4:00 PM EST
+                        }));
+                      }}
+                      className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 transition-colors"
+                    >
+                      Full Market Hours
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValues((prev) => ({
+                          ...prev,
+                          startTime: '06:30', // 9:30 AM EST
+                          endTime: '11:00', // 2:00 PM EST
+                        }));
+                      }}
+                      className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 transition-colors"
+                    >
+                      Morning Session
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValues((prev) => ({
+                          ...prev,
+                          startTime: '11:00', // 2:00 PM EST
+                          endTime: '13:00', // 4:00 PM EST
+                        }));
+                      }}
+                      className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 transition-colors"
+                    >
+                      Afternoon Session
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <label className="flex flex-col">
                       <span className="text-sm text-gray-600">Start Date</span>
@@ -205,7 +291,14 @@ export default function AlgoForm() {
                       />
                     </label>
                     <label className="flex flex-col">
-                      <span className="text-sm text-gray-600">Start Time</span>
+                      <span className="text-sm text-gray-600">
+                        Start Time (PST)
+                        {values.startTime && (
+                          <span className="text-xs text-green-600 ml-2">
+                            = {getESTTime(values.startTime)} EST
+                          </span>
+                        )}
+                      </span>
                       <input
                         type="time"
                         name="startTime"
@@ -227,7 +320,14 @@ export default function AlgoForm() {
                       />
                     </label>
                     <label className="flex flex-col">
-                      <span className="text-sm text-gray-600">End Time</span>
+                      <span className="text-sm text-gray-600">
+                        End Time (PST)
+                        {values.endTime && (
+                          <span className="text-xs text-green-600 ml-2">
+                            = {getESTTime(values.endTime)} EST
+                          </span>
+                        )}
+                      </span>
                       <input
                         type="time"
                         name="endTime"

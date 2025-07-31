@@ -1,10 +1,10 @@
-// src/strategy/readCSV.ts - FIXED VERSION WITH SMA AND VWAP
+// src/app/_lib/algo/data/readCSV.ts - FIXED VERSION
 import fs from 'fs';
 import path from 'path';
 import { Parser } from 'csv-parse';
 import { CsvBar } from '../types/types';
-
 import { getTradingDates } from '../analysis/Calculations';
+
 const BASE_DIR = path.join(
   process.cwd(),
   'src/app/_lib/algo/data/csv_database'
@@ -95,23 +95,15 @@ export async function* streamCsvBars(
   const tradingDates = getTradingDates(start, end);
   const tradingDateSet = new Set(tradingDates);
 
-  // Enhanced debugging
-  console.log(`\n🔍 READCSV DEBUG - Environment:`);
+  console.log(`\n📊 CSV Reader Configuration:`);
   console.log(
-    `   - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`
+    `   - Date Range: ${startComponents.dateKey} to ${endComponents.dateKey}`
   );
-  console.log(`   - Current time: ${new Date().toString()}`);
-  console.log(`   - Working with components (no timezone issues!):`);
   console.log(
-    `   - Start: ${startComponents.dateKey} ${startComponents.timeKey}`
+    `   - Time Range: ${startComponents.timeKey} to ${endComponents.timeKey} (PST)`
   );
-  console.log(`   - End: ${endComponents.dateKey} ${endComponents.timeKey}`);
-
-  console.log(
-    `🎯 Target time window: ${startComponents.timeKey} to ${endComponents.timeKey} (24-hour format PST)`
-  );
-  console.log(`📅 Valid trading dates: ${tradingDates.join(', ')}`);
-  console.log(`🔍 DEBUG - Received params:`, params);
+  console.log(`   - Trading Days: ${tradingDates.length}`);
+  console.log(`   - CSV Files: ${csvFiles.length}`);
 
   // 1) Validate files exist up-front
   for (const f of csvFiles) {
@@ -130,7 +122,7 @@ export async function* streamCsvBars(
   // 2) Stream through each CSV file
   for (const f of csvFiles) {
     const full = path.join(BASE_DIR, f);
-    console.log(`▶️ Streaming ${full}`);
+    console.log(`\n▶️ Streaming ${f}`);
 
     const parser = new Parser({ columns: true, skip_empty_lines: true });
     const input = fs.createReadStream(full).pipe(parser);
@@ -141,6 +133,9 @@ export async function* streamCsvBars(
       const timestamp = record.timestamp;
 
       if (!timestamp) continue;
+
+      // Skip header row
+      if (timestamp === 'timestamp') continue;
 
       // Parse the bar timestamp into components
       let barComponents: ReturnType<typeof parseTimestampToComponents>;
@@ -224,12 +219,12 @@ export async function* streamCsvBars(
           ema_100: record.ema_100 ? parseFloat(record.ema_100) : undefined,
           ema_200: record.ema_200 ? parseFloat(record.ema_200) : undefined,
 
-          // SMA fields - FIXED: Now properly parsing from CSV
+          // SMA fields
           sma_50: record.sma_50 ? parseFloat(record.sma_50) : undefined,
           sma_100: record.sma_100 ? parseFloat(record.sma_100) : undefined,
           sma_200: record.sma_200 ? parseFloat(record.sma_200) : undefined,
 
-          // VWAP - FIXED: Now properly parsing from CSV
+          // VWAP
           vwap: record.vwap ? parseFloat(record.vwap) : undefined,
         };
 
@@ -273,7 +268,7 @@ export async function* streamCsvBars(
     console.log(`✅ File ${f}: Found ${barsFromThisFile} bars in time window`);
   }
 
-  console.log(`🎉 Total bars yielded across all files: ${totalBarsYielded}`);
+  console.log(`\n🎉 Total bars yielded across all files: ${totalBarsYielded}`);
 
   // Summary of indicator availability
   if (!firstBarWithSMA) {

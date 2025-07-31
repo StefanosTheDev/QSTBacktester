@@ -1,4 +1,6 @@
-// src/app/_lib/algo/core/AccountTracker.ts
+// src/app/_lib/algo/core/AccountTracker.ts - Key updates only
+import { DateTimeUtils } from '../utils/DateTimeUtils';
+
 export interface AccountSnapshot {
   timestamp: string;
   balance: number;
@@ -37,14 +39,8 @@ export class AccountTracker {
     this.currentBalance = startingBalance;
     this.highWaterMark = startingBalance;
 
-    // Record initial snapshot - use a fixed format timestamp
-    this.recordSnapshot(this.createInitialTimestamp());
-  }
-
-  private createInitialTimestamp(): string {
-    // Create a consistent initial timestamp format
-    // This avoids using new Date() which is timezone dependent
-    return '2025-01-01 09:30:00 AM';
+    // Record initial snapshot with a sample timestamp
+    this.recordSnapshot('2025-01-01 06:30:00 AM'); // PST
   }
 
   recordTrade(
@@ -137,33 +133,11 @@ export class AccountTracker {
     });
   }
 
-  // FIXED: Calculate days between timestamps without using Date objects
+  /**
+   * UPDATED: Use DateTimeUtils for consistent day calculation
+   */
   private calculateDaysBetween(start: string, end: string): number {
-    // Parse the timestamps manually
-    const parseTimestamp = (
-      ts: string
-    ): { year: number; month: number; day: number } => {
-      // Handle "YYYY-MM-DD HH:MM:SS AM/PM" format
-      const datePart = ts.split(' ')[0];
-      if (datePart && datePart.includes('-')) {
-        const [year, month, day] = datePart.split('-').map(Number);
-        return { year, month, day };
-      }
-      // Fallback - should not happen with our data
-      throw new Error(`Cannot parse timestamp: ${ts}`);
-    };
-
-    const startDate = parseTimestamp(start);
-    const endDate = parseTimestamp(end);
-
-    // Simple day calculation without timezone issues
-    // This is approximate but consistent
-    const startDays =
-      startDate.year * 365 + startDate.month * 30 + startDate.day;
-    const endDays = endDate.year * 365 + endDate.month * 30 + endDate.day;
-
-    const diffDays = Math.abs(endDays - startDays);
-    return Math.max(1, diffDays); // At least 1 day
+    return DateTimeUtils.getDaysBetween(start, end);
   }
 
   getAccountSummary(): {
@@ -278,7 +252,12 @@ export class AccountTracker {
   }
 
   getDrawdownEvents(): DrawdownEvent[] {
-    return this.drawdownEvents;
+    // Convert drawdown event dates to EST for display
+    return this.drawdownEvents.map((event) => ({
+      ...event,
+      startDate: DateTimeUtils.convertPSTtoEST(event.startDate).date,
+      endDate: DateTimeUtils.convertPSTtoEST(event.endDate).date,
+    }));
   }
 
   getEquityCurve(): Array<{
@@ -295,7 +274,9 @@ export class AccountTracker {
     }));
   }
 
-  // Get daily account balances for charting
+  /**
+   * UPDATED: Get daily account balances with EST dates for display
+   */
   getDailyBalances(): Record<
     string,
     {
@@ -319,18 +300,8 @@ export class AccountTracker {
     > = {};
 
     this.snapshots.forEach((snapshot) => {
-      // Extract date part without using Date object
-      const datePart = snapshot.timestamp.split(' ')[0]; // Get "YYYY-MM-DD"
-
-      // Convert to MM/DD/YYYY format for consistency
-      let date: string;
-      if (datePart && datePart.includes('-')) {
-        const [year, month, day] = datePart.split('-');
-        date = `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
-      } else {
-        // Fallback - should not happen
-        date = datePart;
-      }
+      // Use EST date for grouping
+      const date = DateTimeUtils.getDisplayDateKey(snapshot.timestamp);
 
       if (!dailyData[date]) {
         dailyData[date] = {

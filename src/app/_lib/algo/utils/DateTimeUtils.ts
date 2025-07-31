@@ -1,176 +1,208 @@
-// src/strategy/utils/DateTimeUtils.ts
+// src/app/_lib/algo/utils/DateTimeUtils.ts
 import { DateTime } from 'luxon';
 
-// IMPORTANT: Remove the TZ override - we'll handle timezones explicitly
-// DO NOT rely on process.env.TZ as it's inconsistent between environments
-
+/**
+ * Centralized timezone handling for the entire application
+ *
+ * TIMEZONE FLOW:
+ * 1. User inputs times in PST (matching CSV files)
+ * 2. Process internally in UTC for consistency
+ * 3. Convert to EST for display only
+ *
+ * CSV FILES: PST format "YYYY-MM-DD HH:MM:SS AM/PM"
+ * INTERNAL: UTC (timezone neutral)
+ * DISPLAY: EST (market timezone)
+ */
 export class DateTimeUtils {
-  private static readonly PST_ZONE = 'America/Los_Angeles';
-  private static readonly TIMESTAMP_FORMAT = 'yyyy-MM-dd hh:mm:ss a';
+  // Timezone constants
+  static readonly PST_ZONE = 'America/Los_Angeles';
+  static readonly EST_ZONE = 'America/New_York';
+  static readonly UTC_ZONE = 'UTC';
+
+  // Format constants
+  static readonly TIMESTAMP_FORMAT = 'yyyy-MM-dd hh:mm:ss a';
+  static readonly DATE_FORMAT = 'MM/dd/yyyy';
+  static readonly TIME_FORMAT = 'hh:mm:ss a';
+  static readonly TIME_24_FORMAT = 'HH:mm:ss';
 
   /**
-   * Parse timestamp string to DateTime object in PST
-   * This ensures consistent parsing regardless of server timezone
+   * Parse a PST timestamp from CSV and convert to UTC
+   * This is the MAIN parsing method used throughout the system
    */
-  static parseTimestamp(timestamp: string): DateTime {
-    // Always parse in PST timezone explicitly
-    return DateTime.fromFormat(timestamp, this.TIMESTAMP_FORMAT, {
+  static parseTimestampToUTC(pstTimestamp: string): DateTime {
+    const pstTime = DateTime.fromFormat(pstTimestamp, this.TIMESTAMP_FORMAT, {
       zone: this.PST_ZONE,
-      setZone: true, // Important: this ensures the DateTime is in PST
     });
+
+    if (!pstTime.isValid) {
+      throw new Error(
+        `Invalid PST timestamp: "${pstTimestamp}". Reason: ${pstTime.invalidReason}`
+      );
+    }
+
+    return pstTime.toUTC();
   }
 
   /**
-   * Parse timestamp components WITHOUT using Date objects
-   * This is timezone-independent
+   * Convert PST timestamp to EST for display
+   * Used for showing trade times to users
    */
-  static parseTimestampToComponents(timestamp: string): {
-    year: number;
-    month: number;
-    day: number;
-    hour: number;
-    minute: number;
-    second: number;
-    dateKey: string;
+  static convertPSTtoEST(pstTimestamp: string): {
+    date: string;
+    time: string;
+    datetime: string;
   } {
-    // "2025-01-15 09:30:00 AM" → parse components
-    const parts = timestamp.split(' ');
-    if (parts.length !== 3) {
-      throw new Error(`Invalid timestamp format: "${timestamp}"`);
-    }
-
-    const [datePart, timePart, ampm] = parts;
-    const [year, month, day] = datePart.split('-').map(Number);
-    const [hours, minutes, seconds] = timePart.split(':').map(Number);
-
-    // Convert to 24-hour WITHOUT timezone interpretation
-    let hour24 = hours;
-    if (ampm === 'PM' && hours !== 12) hour24 += 12;
-    if (ampm === 'AM' && hours === 12) hour24 = 0;
-
-    const dateKey = `${String(month).padStart(2, '0')}/${String(day).padStart(
-      2,
-      '0'
-    )}/${year}`;
+    const utcTime = this.parseTimestampToUTC(pstTimestamp);
+    const estTime = utcTime.setZone(this.EST_ZONE);
 
     return {
-      year,
-      month,
-      day,
-      hour: hour24,
-      minute: minutes,
-      second: seconds,
-      dateKey,
+      date: estTime.toFormat(this.DATE_FORMAT),
+      time: estTime.toFormat(this.TIME_FORMAT),
+      datetime: estTime.toFormat(`${this.DATE_FORMAT} ${this.TIME_FORMAT}`),
     };
   }
 
   /**
-   * Get consistent date key in MM/DD/YYYY format
-   * NEVER use Date object for parsing
+   * Get date key in PST for file selection and internal grouping
    */
-  static getDateKey(timestamp: string): string {
-    try {
-      // First try manual parsing (timezone independent)
-      const components = this.parseTimestampToComponents(timestamp);
-      return components.dateKey;
-    } catch (error) {
-      // If that fails, use Luxon with explicit timezone
-      const dt = this.parseTimestamp(timestamp);
-      if (dt.isValid) {
-        return dt.toFormat('MM/dd/yyyy');
-      }
-
-      // Last resort - but this should never happen
-      console.error('Failed to parse timestamp:', timestamp, error);
-      return '';
-    }
+  static getDateKey(pstTimestamp: string): string {
+    const utcTime = this.parseTimestampToUTC(pstTimestamp);
+    const pstTime = utcTime.setZone(this.PST_ZONE);
+    return pstTime.toFormat(this.DATE_FORMAT);
   }
 
   /**
-   * Convert PST timestamp to EST display format
-   * Using component parsing to avoid timezone issues
+   * Get date key in EST for display grouping (daily P&L etc)
    */
-  static convertPSTtoEST(timestamp: string): { date: string; time: string } {
-    try {
-      const components = this.parseTimestampToComponents(timestamp);
-
-      // Add 3 hours for PST to EST conversion
-      let estHour = components.hour + 3;
-      let estDay = components.day;
-      let estMonth = components.month;
-      let estYear = components.year;
-
-      // Handle day rollover
-      if (estHour >= 24) {
-        estHour -= 24;
-        estDay++;
-
-        const daysInMonth = new Date(estYear, estMonth, 0).getDate();
-        if (estDay > daysInMonth) {
-          estDay = 1;
-          estMonth++;
-          if (estMonth > 12) {
-            estMonth = 1;
-            estYear++;
-          }
-        }
-      }
-
-      // Format date and time
-      const dateStr = `${String(estMonth).padStart(2, '0')}/${String(
-        estDay
-      ).padStart(2, '0')}/${estYear}`;
-
-      let displayHour = estHour;
-      let displayAmPm = 'AM';
-      if (estHour >= 12) {
-        displayAmPm = 'PM';
-        if (estHour > 12) displayHour = estHour - 12;
-      }
-      if (displayHour === 0) displayHour = 12;
-
-      const timeStr = `${String(displayHour).padStart(2, '0')}:${String(
-        components.minute
-      ).padStart(2, '0')}:${String(components.second).padStart(
-        2,
-        '0'
-      )} ${displayAmPm}`;
-
-      return { date: dateStr, time: timeStr };
-    } catch (error) {
-      console.error('Error converting PST to EST:', timestamp, error);
-      return { date: 'Invalid', time: 'Invalid' };
-    }
+  static getDisplayDateKey(pstTimestamp: string): string {
+    const utcTime = this.parseTimestampToUTC(pstTimestamp);
+    const estTime = utcTime.setZone(this.EST_ZONE);
+    return estTime.toFormat(this.DATE_FORMAT);
   }
 
   /**
-   * Get hour and minute from timestamp
+   * Get time components in PST (for internal time range filtering)
    */
-  static getTimeComponents(timestamp: string): {
+  static getTimeComponents(pstTimestamp: string): {
     hour: number;
     minute: number;
+    second: number;
   } {
-    try {
-      const components = this.parseTimestampToComponents(timestamp);
-      return { hour: components.hour, minute: components.minute };
-    } catch {
-      // Fallback to Luxon
-      const dt = this.parseTimestamp(timestamp);
-      return { hour: dt.hour, minute: dt.minute };
-    }
+    const utcTime = this.parseTimestampToUTC(pstTimestamp);
+    const pstTime = utcTime.setZone(this.PST_ZONE);
+    return {
+      hour: pstTime.hour,
+      minute: pstTime.minute,
+      second: pstTime.second,
+    };
   }
 
   /**
-   * Format DateTime for logging
+   * Compare two timestamps (timezone-neutral using UTC)
    */
-  static formatForLog(timestamp: string): string {
-    const dt = this.parseTimestamp(timestamp);
-    return dt.toLocaleString(DateTime.TIME_SIMPLE);
+  static compareTimestamps(a: string, b: string): number {
+    const aUTC = this.parseTimestampToUTC(a);
+    const bUTC = this.parseTimestampToUTC(b);
+
+    if (aUTC < bUTC) return -1;
+    if (aUTC > bUTC) return 1;
+    return 0;
   }
 
   /**
-   * Create a timestamp string in the expected format
-   * Useful for testing or generating timestamps
+   * Check if timestamp falls within a time range (in PST)
+   */
+  static isInTimeRange(
+    timestamp: string,
+    startTime: string, // "09:30:00"
+    endTime: string // "16:00:00"
+  ): boolean {
+    const timeComponents = this.getTimeComponents(timestamp);
+
+    const [startHour, startMin, startSec] = startTime.split(':').map(Number);
+    const [endHour, endMin, endSec] = endTime.split(':').map(Number);
+
+    const timeMinutes =
+      timeComponents.hour * 60 +
+      timeComponents.minute +
+      timeComponents.second / 60;
+    const startMinutes = startHour * 60 + startMin + (startSec || 0) / 60;
+    const endMinutes = endHour * 60 + endMin + (endSec || 0) / 60;
+
+    return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+  }
+
+  /**
+   * Convert 24-hour time to 12-hour format with AM/PM
+   */
+  static convertTo12Hour(time24: string): string {
+    const parts = time24.split(':');
+    const hours = parseInt(parts[0]);
+    const minutes = parts[1] || '00';
+    const seconds = parts[2] || '00';
+
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+
+    return `${String(hours12).padStart(
+      2,
+      '0'
+    )}:${minutes}:${seconds} ${period}`;
+  }
+
+  /**
+   * Parse a date in MM/DD/YYYY format for display sorting
+   */
+  static parseDateKey(dateKey: string): {
+    year: number;
+    month: number;
+    day: number;
+    comparable: number;
+  } {
+    const [month, day, year] = dateKey.split('/').map(Number);
+    return {
+      year,
+      month,
+      day,
+      comparable: year * 10000 + month * 100 + day,
+    };
+  }
+
+  /**
+   * Sort date keys in MM/DD/YYYY format
+   */
+  static sortDateKeys(dateKeys: string[]): string[] {
+    return dateKeys.sort((a, b) => {
+      const aDate = this.parseDateKey(a);
+      const bDate = this.parseDateKey(b);
+      return aDate.comparable - bDate.comparable;
+    });
+  }
+
+  /**
+   * Get the number of days between two timestamps
+   */
+  static getDaysBetween(start: string, end: string): number {
+    const startUTC = this.parseTimestampToUTC(start);
+    const endUTC = this.parseTimestampToUTC(end);
+
+    const startDate = startUTC.startOf('day');
+    const endDate = endUTC.startOf('day');
+
+    return Math.floor(endDate.diff(startDate, 'days').days);
+  }
+
+  /**
+   * Format log output (always in PST to match CSV)
+   */
+  static formatForLog(pstTimestamp: string): string {
+    const utcTime = this.parseTimestampToUTC(pstTimestamp);
+    const pstTime = utcTime.setZone(this.PST_ZONE);
+    return pstTime.toFormat(this.TIME_FORMAT);
+  }
+
+  /**
+   * Create a PST timestamp for testing
    */
   static createTimestamp(
     year: number,
@@ -180,17 +212,43 @@ export class DateTimeUtils {
     minute: number,
     second: number = 0
   ): string {
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-
-    return (
-      `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(
-        2,
-        '0'
-      )} ` +
-      `${displayHour}:${String(minute).padStart(2, '0')}:${String(
-        second
-      ).padStart(2, '0')} ${ampm}`
+    const dt = DateTime.fromObject(
+      { year, month, day, hour, minute, second },
+      { zone: this.PST_ZONE }
     );
+
+    return dt.toFormat(this.TIMESTAMP_FORMAT).toUpperCase();
+  }
+
+  /**
+   * Diagnostic function to verify timezone handling
+   */
+  static runDiagnostics(sampleTimestamp?: string): void {
+    const testTimestamp = sampleTimestamp || '2024-12-31 03:00:00 PM';
+
+    console.log('\n🔍 DateTimeUtils Diagnostics:');
+    console.log('================================');
+    console.log(`System timezone: ${DateTime.local().zoneName}`);
+    console.log(`Input timestamp (PST): ${testTimestamp}`);
+
+    try {
+      const utc = this.parseTimestampToUTC(testTimestamp);
+      const pst = utc.setZone(this.PST_ZONE);
+      const est = utc.setZone(this.EST_ZONE);
+      const dateKey = this.getDateKey(testTimestamp);
+      const displayKey = this.getDisplayDateKey(testTimestamp);
+      const estDisplay = this.convertPSTtoEST(testTimestamp);
+
+      console.log(`\nParsed to UTC: ${utc.toISO()}`);
+      console.log(`Back to PST: ${pst.toFormat(this.TIMESTAMP_FORMAT)}`);
+      console.log(`Converted to EST: ${est.toFormat(this.TIMESTAMP_FORMAT)}`);
+      console.log(`\nDate key (PST): ${dateKey}`);
+      console.log(`Display key (EST): ${displayKey}`);
+      console.log(`Display format: ${estDisplay.datetime}`);
+      console.log('\n✅ Timezone handling is working correctly');
+    } catch (error) {
+      console.error('❌ Diagnostic error:', error);
+    }
+    console.log('================================\n');
   }
 }

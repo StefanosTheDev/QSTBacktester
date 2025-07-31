@@ -1,12 +1,14 @@
-// src/strategy/DailyLimitManager.ts
+// src/app/_lib/algo/core/DailyLimitManager.ts
+import { DateTimeUtils } from '../utils/DateTimeUtils';
+
 export interface DailyStats {
-  date: string;
-  pnl: number;
-  actualPnl: number; // Track actual P&L before limits
+  date: string; // EST date for display
+  pnl: number; // Capped P&L
+  actualPnl: number; // Actual P&L before limits
   trades: number;
   hitDailyStop: boolean;
   hitDailyTarget: boolean;
-  tradingEnabled: boolean; // Track if trading is allowed
+  tradingEnabled: boolean;
 }
 
 export class DailyLimitManager {
@@ -16,28 +18,21 @@ export class DailyLimitManager {
   private maxDailyProfit: number;
 
   constructor(maxDailyLoss?: number, maxDailyProfit?: number) {
-    // Convert to negative for easier comparison
     this.maxDailyLoss = maxDailyLoss ? -Math.abs(maxDailyLoss) : -Infinity;
     this.maxDailyProfit = maxDailyProfit || Infinity;
   }
 
-  // FIXED: Consistent date key function that NEVER uses Date objects
+  /**
+   * Get date key using EST for daily grouping (market days)
+   */
   private getDateKey(timestamp: string): string {
-    // The timestamp is like "2025-01-15 09:30:00 AM"
-    // Extract just the date part and convert to MM/DD/YYYY format
-    const datePart = timestamp.split(' ')[0]; // Gets "2025-01-15"
-
-    if (datePart && datePart.includes('-')) {
-      const [year, month, day] = datePart.split('-');
-      return `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
-    }
-
-    // If we get here, the timestamp format is unexpected
-    console.error('Unexpected timestamp format:', timestamp);
-    throw new Error(`Cannot parse timestamp: ${timestamp}`);
+    // Use display date key for EST-based daily grouping
+    return DateTimeUtils.getDisplayDateKey(timestamp);
   }
 
-  // Check if trading is allowed for the current timestamp
+  /**
+   * Check if trading is allowed for the current timestamp
+   */
   canTrade(timestamp: string): boolean {
     const date = this.getDateKey(timestamp);
 
@@ -52,7 +47,7 @@ export class DailyLimitManager {
           trades: 0,
           hitDailyStop: false,
           hitDailyTarget: false,
-          tradingEnabled: true, // Start each day with trading enabled
+          tradingEnabled: true,
         });
       }
     }
@@ -62,7 +57,7 @@ export class DailyLimitManager {
 
     // Check if we've already hit limits today
     if (todayStats.hitDailyStop || todayStats.hitDailyTarget) {
-      return false; // No more trading allowed today
+      return false;
     }
 
     // Check current P&L against limits
@@ -82,6 +77,9 @@ export class DailyLimitManager {
     return todayStats.tradingEnabled;
   }
 
+  /**
+   * Record a trade and check for limit breaches
+   */
   recordTrade(
     timestamp: string,
     profit: number
@@ -106,7 +104,7 @@ export class DailyLimitManager {
       this.dailyStats.set(date, todayStats);
     }
 
-    // IMPORTANT: Always update actual P&L
+    // Always update actual P&L
     todayStats.actualPnl += profit;
     todayStats.trades++;
 
@@ -115,35 +113,32 @@ export class DailyLimitManager {
     let hitLimit = false;
     let reason = '';
 
-    // For capped P&L calculation
     const oldCappedPnl = todayStats.pnl;
     let newCappedPnl = oldCappedPnl + profit;
 
-    // Check if we hit the daily loss limit
+    // Check daily loss limit
     if (
       this.maxDailyLoss !== -Infinity &&
       todayStats.actualPnl <= this.maxDailyLoss
     ) {
-      // Cap the displayed P&L at the limit
       newCappedPnl = this.maxDailyLoss;
       cappedProfit = this.maxDailyLoss - oldCappedPnl;
       todayStats.hitDailyStop = true;
-      todayStats.tradingEnabled = false; // Disable further trading
+      todayStats.tradingEnabled = false;
       hitLimit = true;
       reason = `Daily stop loss hit: $${Math.abs(this.maxDailyLoss).toFixed(
         2
       )}`;
     }
-    // Check if we hit the daily profit target
+    // Check daily profit target
     else if (
       this.maxDailyProfit !== Infinity &&
       todayStats.actualPnl >= this.maxDailyProfit
     ) {
-      // Cap the displayed P&L at the limit
       newCappedPnl = this.maxDailyProfit;
       cappedProfit = this.maxDailyProfit - oldCappedPnl;
       todayStats.hitDailyTarget = true;
-      todayStats.tradingEnabled = false; // Disable further trading
+      todayStats.tradingEnabled = false;
       hitLimit = true;
       reason = `Daily profit target hit: $${this.maxDailyProfit.toFixed(2)}`;
     }
@@ -158,60 +153,70 @@ export class DailyLimitManager {
     };
   }
 
-  // Check if a specific date has hit limits
+  /**
+   * Get all daily stats sorted by date
+   */
+  getDailyStats(): DailyStats[] {
+    const allStats = Array.from(this.dailyStats.values());
+    // Use DateTimeUtils to sort dates properly
+    return allStats.sort((a, b) => {
+      const aDate = DateTimeUtils.parseDateKey(a.date);
+      const bDate = DateTimeUtils.parseDateKey(b.date);
+      return aDate.comparable - bDate.comparable;
+    });
+  }
+
+  /**
+   * Get daily P&L (capped at limits)
+   */
+  getDailyCappedPnL(): Record<string, number> {
+    const dailyPnL: Record<string, number> = {};
+    for (const stats of this.dailyStats.values()) {
+      dailyPnL[stats.date] = stats.pnl;
+    }
+    return dailyPnL;
+  }
+
+  /**
+   * Get actual daily P&L (uncapped)
+   */
+  getDailyActualPnL(): Record<string, number> {
+    const dailyPnL: Record<string, number> = {};
+    for (const stats of this.dailyStats.values()) {
+      dailyPnL[stats.date] = stats.actualPnl;
+    }
+    return dailyPnL;
+  }
+
+  /**
+   * Get current day's P&L
+   */
+  getCurrentDayPnL(timestamp: string): number {
+    const date = this.getDateKey(timestamp);
+    const todayStats = this.dailyStats.get(date);
+    return todayStats ? todayStats.actualPnl : 0;
+  }
+
+  /**
+   * Get current day's capped P&L
+   */
+  getCurrentDayCappedPnL(timestamp: string): number {
+    const date = this.getDateKey(timestamp);
+    const todayStats = this.dailyStats.get(date);
+    return todayStats ? todayStats.pnl : 0;
+  }
+
+  /**
+   * Check if a specific date has hit limits
+   */
   hasHitLimits(date: string): boolean {
     const stats = this.dailyStats.get(date);
     return stats ? stats.hitDailyStop || stats.hitDailyTarget : false;
   }
 
-  getDailyStats(): DailyStats[] {
-    return Array.from(this.dailyStats.values()).sort((a, b) => {
-      // FIXED: Parse MM/DD/YYYY format WITHOUT using Date objects
-      const parseDate = (dateStr: string) => {
-        const [month, day, year] = dateStr.split('/').map((n) => parseInt(n));
-        // Return a comparable number: YYYYMMDD
-        return year * 10000 + month * 100 + day;
-      };
-
-      return parseDate(a.date) - parseDate(b.date);
-    });
-  }
-
-  getDailyCappedPnL(): Record<string, number> {
-    const dailyPnL: Record<string, number> = {};
-
-    for (const stats of this.dailyStats.values()) {
-      // Use the capped P&L for display
-      dailyPnL[stats.date] = stats.pnl;
-    }
-
-    return dailyPnL;
-  }
-
-  // Get actual (uncapped) daily P&L
-  getDailyActualPnL(): Record<string, number> {
-    const dailyPnL: Record<string, number> = {};
-
-    for (const stats of this.dailyStats.values()) {
-      // Use the actual P&L
-      dailyPnL[stats.date] = stats.actualPnl;
-    }
-
-    return dailyPnL;
-  }
-
-  getCurrentDayPnL(timestamp: string): number {
-    const date = this.getDateKey(timestamp);
-    const todayStats = this.dailyStats.get(date);
-    return todayStats ? todayStats.actualPnl : 0; // Return actual P&L, not capped
-  }
-
-  getCurrentDayCappedPnL(timestamp: string): number {
-    const date = this.getDateKey(timestamp);
-    const todayStats = this.dailyStats.get(date);
-    return todayStats ? todayStats.pnl : 0; // Return capped P&L
-  }
-
+  /**
+   * Get summary statistics
+   */
   getSummary(): {
     totalDays: number;
     profitableDays: number;
@@ -225,7 +230,6 @@ export class DailyLimitManager {
   } {
     const allDays = this.getDailyStats();
 
-    // Use actual P&L for determining profitable/losing days
     const profitableDays = allDays.filter((d) => d.actualPnl > 0);
     const losingDays = allDays.filter((d) => d.actualPnl < 0);
 
