@@ -428,7 +428,6 @@ export default function AlgoForm() {
                         <option value="13">EMA 13</option>
                         <option value="21">EMA 21</option>
                         <option value="22">EMA 22</option>
-                        <option value="50">EMA 50</option>
                         <option value="100">EMA 100</option>
                         <option value="200">EMA 200</option>
                       </select>
