@@ -53,15 +53,19 @@ export class BacktestLogger {
         Intl.DateTimeFormat().resolvedOptions().timeZone
       }`
     );
+
+    // Use UTC for consistent time display
+    const now = DateTime.utc();
+    this.logs.push(`   - Current UTC Time: ${now.toISO()}`);
     this.logs.push(
-      `   - Server Time Now: ${DateTime.now()
+      `   - Current PST Time: ${now
         .setZone('America/Los_Angeles')
-        .toString()}`
+        .toFormat('yyyy-MM-dd HH:mm:ss')}`
     );
     this.logs.push(
-      `   - Server UTC Offset: ${
-        DateTime.now().setZone('America/Los_Angeles').offset
-      } minutes`
+      `   - Current EST Time: ${now
+        .setZone('America/New_York')
+        .toFormat('yyyy-MM-dd HH:mm:ss')}`
     );
     this.logs.push(`   - NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
     this.logs.push(`   - TZ env var: ${process.env.TZ || 'not set'}`);
