@@ -415,20 +415,25 @@ export default function AlgoForm() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <label className="flex flex-col">
-                      <span className="text-sm text-gray-600">
-                        EMA Period (0 = disabled)
-                      </span>
-                      <input
-                        type="number"
+                      <span className="text-sm text-gray-600">EMA Filter</span>
+                      <select
                         name="emaMovingAverage"
-                        value={values.emaMovingAverage || ''}
+                        value={values.emaMovingAverage}
                         onChange={handleChange}
-                        placeholder="e.g. 21, 50, 100, 200"
-                        min="0"
                         className="mt-1 border rounded px-3 py-2 text-gray-800"
-                      />
+                      >
+                        <option value="0">Disabled</option>
+                        <option value="8">EMA 8</option>
+                        <option value="9">EMA 9</option>
+                        <option value="13">EMA 13</option>
+                        <option value="21">EMA 21</option>
+                        <option value="22">EMA 22</option>
+                        <option value="50">EMA 50</option>
+                        <option value="100">EMA 100</option>
+                        <option value="200">EMA 200</option>
+                      </select>
                       <span className="text-xs text-gray-500 mt-1">
-                        Enter any EMA period (8, 21, 50, 100, 200, etc.)
+                        Price must be above EMA for trades
                       </span>
                     </label>
                     <label className="flex flex-col">
