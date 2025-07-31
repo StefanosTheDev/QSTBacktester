@@ -1,4 +1,7 @@
-// Calculations.ts
+// src/app/_lib/algo/analysis/Calculations.ts
+import Holidays from 'date-holidays';
+import { csvFiles, CandleType, BarType, MonthKey } from '../data/csvFiles';
+
 export function calculateLinearRegression(y: number[]): {
   slope: number;
   residuals: number[];
@@ -14,11 +17,6 @@ export function calculateLinearRegression(y: number[]): {
 
   return { slope, residuals };
 }
-// utils/calculations.ts
-import { csvFiles, CandleType, BarType, MonthKey } from '../data/csvFiles';
-// src/utils/tradingDays.ts
-import Holidays from 'date-holidays';
-import { eachDayOfInterval, isWeekend, parseISO, format } from 'date-fns';
 
 export function formatEasternTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', {
@@ -29,9 +27,8 @@ export function formatEasternTime(iso: string): string {
     second: '2-digit',
   });
 }
-// src/app/_lib/algo/src/utils/selectCSV.ts
 
-/** grab “YYYY-MM” from a full timestamp */
+/** grab "YYYY-MM" from a full timestamp */
 function monthKeyFromTimestamp(ts: string): MonthKey {
   return ts.slice(0, 7) as MonthKey;
 }
@@ -80,11 +77,46 @@ export function selectCSV(
   });
 }
 
+// FIXED VERSION - Timezone safe trading dates
 const hd = new Holidays('US'); // NYSE follows US federal holidays
 export function getTradingDates(start: string, end: string): string[] {
-  const from = parseISO(start.slice(0, 10)); // "2025-07-01"
-  const to = parseISO(end.slice(0, 10));
-  return eachDayOfInterval({ start: from, end: to })
-    .filter((d) => !isWeekend(d) && !hd.isHoliday(d))
-    .map((d) => format(d, 'yyyy-MM-dd'));
+  // Extract just the date part (YYYY-MM-DD)
+  const startDate = start.slice(0, 10);
+  const endDate = end.slice(0, 10);
+
+  // Parse dates as UTC to avoid timezone issues
+  const from = new Date(startDate + 'T00:00:00.000Z');
+  const to = new Date(endDate + 'T00:00:00.000Z');
+
+  const dates: string[] = [];
+  const current = new Date(from);
+
+  while (current <= to) {
+    // Check if it's a weekday using UTC methods
+    const dayOfWeek = current.getUTCDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // Not Sunday (0) or Saturday (6)
+      // Format as YYYY-MM-DD
+      const year = current.getUTCFullYear();
+      const month = String(current.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(current.getUTCDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      // Check if it's a holiday
+      // Create a local date for holiday checking (holidays are timezone-specific)
+      const localDate = new Date(
+        year,
+        current.getUTCMonth(),
+        current.getUTCDate()
+      );
+      if (!hd.isHoliday(localDate)) {
+        dates.push(dateStr);
+      }
+    }
+
+    // Move to next day
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
 }
