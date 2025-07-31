@@ -1,5 +1,4 @@
 // src/app/_lib/algo/analysis/Calculations.ts
-import Holidays from 'date-holidays';
 import { csvFiles, CandleType, BarType, MonthKey } from '../data/csvFiles';
 
 export function calculateLinearRegression(y: number[]): {
@@ -77,45 +76,95 @@ export function selectCSV(
   });
 }
 
-// FIXED VERSION - Timezone safe trading dates
-const hd = new Holidays('US'); // NYSE follows US federal holidays
+// NYSE holidays for 2025 (hardcoded to avoid timezone issues)
+const NYSE_HOLIDAYS_2025 = new Set([
+  '2025-01-01', // New Year's Day
+  '2025-01-20', // Martin Luther King Jr. Day
+  '2025-02-17', // Presidents Day
+  '2025-04-18', // Good Friday
+  '2025-05-26', // Memorial Day
+  '2025-06-19', // Juneteenth
+  '2025-07-04', // Independence Day
+  '2025-09-01', // Labor Day
+  '2025-11-27', // Thanksgiving Day
+  '2025-12-25', // Christmas Day
+]);
+
+// FIXED VERSION - Completely timezone safe trading dates
 export function getTradingDates(start: string, end: string): string[] {
   // Extract just the date part (YYYY-MM-DD)
   const startDate = start.slice(0, 10);
   const endDate = end.slice(0, 10);
 
-  // Parse dates as UTC to avoid timezone issues
-  const from = new Date(startDate + 'T00:00:00.000Z');
-  const to = new Date(endDate + 'T00:00:00.000Z');
-
   const dates: string[] = [];
-  const current = new Date(from);
 
-  while (current <= to) {
-    // Check if it's a weekday using UTC methods
-    const dayOfWeek = current.getUTCDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      // Not Sunday (0) or Saturday (6)
-      // Format as YYYY-MM-DD
-      const year = current.getUTCFullYear();
-      const month = String(current.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(current.getUTCDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+  // Parse start date components
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
 
-      // Check if it's a holiday
-      // Create a local date for holiday checking (holidays are timezone-specific)
-      const localDate = new Date(
-        year,
-        current.getUTCMonth(),
-        current.getUTCDate()
-      );
-      if (!hd.isHoliday(localDate)) {
-        dates.push(dateStr);
-      }
+  // Create a date counter
+  let year = startYear;
+  let month = startMonth;
+  let day = startDay;
+
+  // Days in each month (accounting for leap years)
+  const getDaysInMonth = (y: number, m: number): number => {
+    if (m === 2) {
+      // February - check for leap year
+      return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28;
+    }
+    return [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  };
+
+  // Day of week calculation (Zeller's congruence)
+  const getDayOfWeek = (y: number, m: number, d: number): number => {
+    if (m < 3) {
+      m += 12;
+      y -= 1;
+    }
+    const k = y % 100;
+    const j = Math.floor(y / 100);
+    const h =
+      (d +
+        Math.floor((13 * (m + 1)) / 5) +
+        k +
+        Math.floor(k / 4) +
+        Math.floor(j / 4) -
+        2 * j) %
+      7;
+    return (h + 6) % 7; // 0 = Sunday, 1 = Monday, etc.
+  };
+
+  // Iterate through dates
+  while (
+    year < endYear ||
+    (year === endYear && month < endMonth) ||
+    (year === endYear && month === endMonth && day <= endDay)
+  ) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(
+      day
+    ).padStart(2, '0')}`;
+    const dayOfWeek = getDayOfWeek(year, month, day);
+
+    // Check if it's a weekday (not Saturday=6 or Sunday=0) and not a holiday
+    if (
+      dayOfWeek !== 0 &&
+      dayOfWeek !== 6 &&
+      !NYSE_HOLIDAYS_2025.has(dateStr)
+    ) {
+      dates.push(dateStr);
     }
 
     // Move to next day
-    current.setUTCDate(current.getUTCDate() + 1);
+    day++;
+    if (day > getDaysInMonth(year, month)) {
+      day = 1;
+      month++;
+      if (month > 12) {
+        month = 1;
+        year++;
+      }
+    }
   }
 
   return dates;
