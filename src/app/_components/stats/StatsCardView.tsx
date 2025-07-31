@@ -133,15 +133,6 @@ export default function StatsCardView({
       'Nov',
       'Dec',
     ];
-    const dayNames = [
-      'Sunday',
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-    ];
 
     switch (format) {
       case 'full':

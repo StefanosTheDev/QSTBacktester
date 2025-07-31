@@ -153,7 +153,7 @@ export class DateTimeUtils {
     try {
       const components = this.parseTimestampToComponents(timestamp);
       return { hour: components.hour, minute: components.minute };
-    } catch (error) {
+    } catch (_error) {
       // Fallback to Luxon
       const dt = this.parseTimestamp(timestamp);
       return { hour: dt.hour, minute: dt.minute };
