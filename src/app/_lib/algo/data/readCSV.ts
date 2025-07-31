@@ -67,13 +67,13 @@ function componentsToDateNumber(
 export async function* streamCsvBars(
   csvFiles: string[],
   start: string,
-  end: string,
-  params?: {
-    emaMovingAverage?: number;
-    adxPeriod?: number;
-    adxThreshold?: number;
-    cvdLookBackBars?: number;
-  }
+  end: string
+  // params?: {
+  //   emaMovingAverage?: number;
+  //   adxPeriod?: number;
+  //   adxThreshold?: number;
+  //   cvdLookBackBars?: number;
+  // }
 ): AsyncGenerator<CsvBar> {
   // Parse start and end into components (no Date objects!)
   const startComponents = parseTimestampToComponents(start);
