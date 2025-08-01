@@ -27,6 +27,7 @@ export class SignalGenerator {
       prevEmaValue?: number;
       adxValue?: number;
       adxThreshold?: number;
+      cvdWindow: number[]; // ADD THIS for momentum check
     }
   ): 'bullish' | 'bearish' | 'none' {
     if (signal === 'none') return 'none';
@@ -42,6 +43,7 @@ export class SignalGenerator {
       prevEmaValue, // eslint-disable-line @typescript-eslint/no-unused-vars
       adxValue,
       adxThreshold,
+      cvdWindow,
     } = filters;
     if (adxThreshold && adxThreshold > 0) {
       console.log(
@@ -122,7 +124,7 @@ export class SignalGenerator {
     }
 
     // 7. CVD color confirmation - STRICT REQUIREMENT (FIXED)
-    // MUST have matching CVD color - NO NEUTRAL ALLOWED
+    // MUST have matching CVD color - NO NEUTRAL
     if (!bar.cvd_color) {
       console.log(
         '    → filtered: CVD color data missing - cannot confirm direction'
@@ -148,8 +150,105 @@ export class SignalGenerator {
       console.log('    → CVD confirmation: RED bar for SHORT ✓');
     }
 
+    // 8. CVD Momentum confirmation - NEW!
+    const momentumCheck = this.validateCVDMomentum(signal, cvdWindow);
+    if (!momentumCheck.valid) {
+      console.log(`    → filtered by CVD momentum: ${momentumCheck.reason}`);
+      return 'none';
+    }
+
     console.log(`    ✓ Signal validated: ${signal.toUpperCase()}`);
     return signal;
+  }
+
+  // NEW METHOD: CVD Momentum Validation
+  private validateCVDMomentum(
+    signal: 'bullish' | 'bearish',
+    cvdWindow: number[],
+    minMomentumRatio: number = 1.5
+  ): { valid: boolean; reason?: string } {
+    if (cvdWindow.length < 3) {
+      return { valid: true }; // Not enough data, skip check
+    }
+
+    // Calculate CVD momentum (rate of change)
+    const currentBar = cvdWindow.length - 1;
+    const prevBar = currentBar - 1;
+    const prevPrevBar = currentBar - 2;
+
+    // Current momentum (how fast CVD is moving now)
+    const currentMomentum = cvdWindow[currentBar] - cvdWindow[prevBar];
+
+    // Previous momentum (how fast it was moving)
+    const previousMomentum = cvdWindow[prevBar] - cvdWindow[prevPrevBar];
+
+    // Average momentum over the window
+    let totalMomentum = 0;
+    for (let i = 1; i < cvdWindow.length; i++) {
+      totalMomentum += Math.abs(cvdWindow[i] - cvdWindow[i - 1]);
+    }
+    const avgMomentum = totalMomentum / (cvdWindow.length - 1);
+
+    if (signal === 'bullish') {
+      // For LONG: CVD must be accelerating upward
+      if (currentMomentum <= 0) {
+        return {
+          valid: false,
+          reason: 'CVD momentum negative on bullish breakout',
+        };
+      }
+
+      // Current momentum should be stronger than previous
+      if (currentMomentum < previousMomentum) {
+        return {
+          valid: false,
+          reason: 'CVD momentum decelerating on bullish breakout',
+        };
+      }
+
+      // Current momentum should be above average
+      if (currentMomentum < avgMomentum * minMomentumRatio) {
+        return {
+          valid: false,
+          reason: `CVD momentum too weak: ${currentMomentum.toFixed(2)} < ${(
+            avgMomentum * minMomentumRatio
+          ).toFixed(2)}`,
+        };
+      }
+    } else {
+      // For SHORT: CVD must be accelerating downward
+      if (currentMomentum >= 0) {
+        return {
+          valid: false,
+          reason: 'CVD momentum positive on bearish breakout',
+        };
+      }
+
+      // Current momentum should be stronger (more negative) than previous
+      if (currentMomentum > previousMomentum) {
+        return {
+          valid: false,
+          reason: 'CVD momentum decelerating on bearish breakout',
+        };
+      }
+
+      // Current momentum should be below average (negative)
+      if (Math.abs(currentMomentum) < avgMomentum * minMomentumRatio) {
+        return {
+          valid: false,
+          reason: `CVD momentum too weak: ${Math.abs(currentMomentum).toFixed(
+            2
+          )} < ${(avgMomentum * minMomentumRatio).toFixed(2)}`,
+        };
+      }
+    }
+
+    console.log(
+      `    → CVD Momentum validated: current=${currentMomentum.toFixed(
+        2
+      )}, avg=${avgMomentum.toFixed(2)}`
+    );
+    return { valid: true };
   }
 
   private checkMultipleIndicators(

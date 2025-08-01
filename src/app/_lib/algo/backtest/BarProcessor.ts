@@ -130,6 +130,8 @@ export class BarProcessor {
     return { count };
   }
 
+  // In BarProcessor.ts, update the generateSignal method:
+
   generateSignal(
     bar: CsvBar,
     prevBar: CsvBar | null,
@@ -194,11 +196,11 @@ export class BarProcessor {
       prevEmaValue,
       adxValue,
       adxThreshold: this.adxThreshold,
+      cvdWindow: this.cvdWindow, // ADD THIS LINE - Pass CVD window for momentum check
     });
 
     return signal;
   }
-
   private updateWindows(bar: CsvBar): void {
     this.cvdWindow.push(bar.cvd_close || 0);
     this.priceWindow.push(bar.close);
