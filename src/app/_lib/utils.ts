@@ -1,7 +1,8 @@
-// src/app/_lib/utils.ts - Updated buildParams function
+// src/app/_lib/utils.ts
 import { FormProp } from '../types/types';
 import { DateTimeUtils } from './algo/utils/DateTimeUtils';
 import { ApiParams } from './algo/types/types';
+
 /**
  * Build API parameters from form data
  * User inputs times in PST (matching CSV files)
@@ -55,5 +56,8 @@ export function buildParams(formData: FormProp): ApiParams {
     useTrailingStop: formData.useTrailingStop || false,
     breakevenTrigger: formData.breakevenTrigger || 3,
     trailDistance: formData.trailDistance || 2,
+
+    // Trade direction
+    tradeDirection: formData.tradeDirection || 'both',
   };
 }

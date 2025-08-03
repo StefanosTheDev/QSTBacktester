@@ -24,6 +24,7 @@ interface SettingsDisplayProps {
     useTrailingStop?: boolean;
     breakevenTrigger?: number;
     trailDistance?: number;
+    tradeDirection?: 'both' | 'long' | 'short';
   };
 }
 
@@ -222,6 +223,18 @@ export default function StatsSettingsDisplay({
                 <span className="font-medium text-blue-600">Enabled</span>
               </div>
             )}
+            <div>
+              <span className="text-gray-600">Trade Direction:</span>{' '}
+              <span className="font-medium">
+                {settings.tradeDirection === 'both'
+                  ? 'Both (Long & Short)'
+                  : settings.tradeDirection === 'long'
+                  ? 'Long Only'
+                  : settings.tradeDirection === 'short'
+                  ? 'Short Only'
+                  : 'Both (Long & Short)'}
+              </span>
+            </div>
           </div>
         </div>
 

@@ -108,6 +108,7 @@ export default function AlgoForm() {
 
     emaMovingAverage: 0,
     adxThreshold: 0,
+    adxPeriod: 14, // Add this if missing
 
     smaFilter: 0,
     useVWAP: false,
@@ -122,6 +123,8 @@ export default function AlgoForm() {
     useTrailingStop: false,
     breakevenTrigger: 3,
     trailDistance: 2,
+
+    tradeDirection: 'both', // NEW: Default to both directions
   });
 
   const [loading, setLoading] = useState(false);
@@ -600,7 +603,67 @@ export default function AlgoForm() {
                     )}
                   </div>
                 </div>
-
+                <div>
+                  <h3 className="text-lg font-medium mb-2 text-gray-700">
+                    Trade Direction Filter
+                  </h3>
+                  <div className="bg-yellow-50 p-4 rounded-lg mb-4">
+                    <p className="text-sm text-gray-700">
+                      <strong>Choose trade direction:</strong> Run backtests for
+                      Long trades only, Short trades only, or both directions
+                      (default).
+                    </p>
+                  </div>
+                  <div className="flex gap-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="tradeDirection"
+                        value="both"
+                        checked={values.tradeDirection === 'both'}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        Both (Long & Short)
+                      </span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="tradeDirection"
+                        value="long"
+                        checked={values.tradeDirection === 'long'}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-green-600"
+                      />
+                      <span className="text-sm font-medium text-green-700">
+                        Long Only
+                      </span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="tradeDirection"
+                        value="short"
+                        checked={values.tradeDirection === 'short'}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-red-600"
+                      />
+                      <span className="text-sm font-medium text-red-700">
+                        Short Only
+                      </span>
+                    </label>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500">
+                    {values.tradeDirection === 'long' &&
+                      'Only LONG (bullish) trades will be taken. SHORT signals will be ignored.'}
+                    {values.tradeDirection === 'short' &&
+                      'Only SHORT (bearish) trades will be taken. LONG signals will be ignored.'}
+                    {values.tradeDirection === 'both' &&
+                      'Both LONG and SHORT trades will be taken based on signals.'}
+                  </div>
+                </div>
                 {/* Daily Limits */}
                 <div>
                   <h3 className="text-lg font-medium mb-2 text-gray-700">

@@ -1,4 +1,4 @@
-// src/types/types.ts
+// src/app/_lib/algo/types/types.ts
 export interface StrategyTrade {
   type: 'bullish' | 'bearish';
   entryPrice: number;
@@ -83,6 +83,9 @@ export interface ApiParams {
   useTrailingStop?: boolean;
   breakevenTrigger?: number;
   trailDistance?: number;
+
+  // NEW - Trade Direction Filter
+  tradeDirection?: 'both' | 'long' | 'short'; // 'both' is default (normal operation)
 }
 
 export interface Position {
@@ -149,4 +152,7 @@ export interface FormProp {
   useTrailingStop: boolean;
   breakevenTrigger: number;
   trailDistance: number;
+
+  // NEW - Trade Direction Filter
+  tradeDirection: 'both' | 'long' | 'short';
 }

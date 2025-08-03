@@ -38,12 +38,15 @@ export class BacktestEngine {
       formData.trailDistance || 2
     );
 
-    // Pass indicator filters to SignalGenerator
-    this.signalGenerator = new SignalGenerator({
-      emaMovingAverage: formData.emaMovingAverage,
-      smaFilter: formData.smaFilter,
-      useVWAP: formData.useVWAP,
-    });
+    // Pass indicator filters AND trade direction to SignalGenerator
+    this.signalGenerator = new SignalGenerator(
+      {
+        emaMovingAverage: formData.emaMovingAverage,
+        smaFilter: formData.smaFilter,
+        useVWAP: formData.useVWAP,
+      },
+      formData.tradeDirection || 'both' // NEW: Pass trade direction
+    );
 
     this.dailyLimitManager = new DailyLimitManager(
       formData.maxDailyLoss,
@@ -423,10 +426,24 @@ export class BacktestEngine {
     }
   }
 
+  // 2. Update the logConfiguration method to include trade direction:
+
   private logConfiguration(): void {
     this.logger.log(
       `🚀 Starting backtest from ${this.formData.start} → ${this.formData.end}`
     );
+
+    // Add trade direction log
+    if (
+      this.formData.tradeDirection &&
+      this.formData.tradeDirection !== 'both'
+    ) {
+      this.logger.log(
+        `🎯 Trade Direction: ${this.formData.tradeDirection.toUpperCase()} only`
+      );
+    } else {
+      this.logger.log(`🎯 Trade Direction: BOTH (Long and Short)`);
+    }
 
     if (this.formData.useTrailingStop) {
       this.logger.log(`📈 Trailing Stop Enabled:`);

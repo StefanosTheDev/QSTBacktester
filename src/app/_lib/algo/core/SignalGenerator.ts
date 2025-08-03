@@ -1,4 +1,4 @@
-// src/core/SignalGenerator.ts
+// src/app/_lib/algo/core/SignalGenerator.ts
 import { CsvBar, TrendlineResult } from '../types/types';
 
 interface IndicatorFilters {
@@ -9,9 +9,14 @@ interface IndicatorFilters {
 
 export class SignalGenerator {
   private indicatorFilters: IndicatorFilters;
+  private tradeDirection: 'both' | 'long' | 'short';
 
-  constructor(indicatorFilters: IndicatorFilters = {}) {
+  constructor(
+    indicatorFilters: IndicatorFilters = {},
+    tradeDirection: 'both' | 'long' | 'short' = 'both'
+  ) {
     this.indicatorFilters = indicatorFilters;
+    this.tradeDirection = tradeDirection;
   }
 
   validateSignal(
@@ -45,6 +50,19 @@ export class SignalGenerator {
       adxThreshold,
       cvdWindow,
     } = filters;
+
+    // NEW: Trade direction filter - Add this EARLY in the validation
+    if (this.tradeDirection !== 'both') {
+      if (this.tradeDirection === 'long' && signal === 'bearish') {
+        console.log('    → filtered: SHORT trades disabled by user setting');
+        return 'none';
+      }
+      if (this.tradeDirection === 'short' && signal === 'bullish') {
+        console.log('    → filtered: LONG trades disabled by user setting');
+        return 'none';
+      }
+    }
+
     if (adxThreshold && adxThreshold > 0) {
       console.log(
         `    → ADX Debug: threshold=${adxThreshold}, current ADX=${
