@@ -13,7 +13,7 @@ export interface FormProp {
   barSize: number;
   candleType: 'traditional' | 'heikinashi';
   cvdLookBackBars?: number;
-
+  //
   // Indicator Settings
   emaMovingAverage?: number;
   adxThreshold?: number;
