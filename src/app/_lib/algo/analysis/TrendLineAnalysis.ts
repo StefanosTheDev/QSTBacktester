@@ -1,7 +1,15 @@
-// src/indicators/TrendlineAnalysis.ts
+// src/indicators/TrendlineAnalysis.ts - ENHANCED VERSION
 import { TrendlineResult } from '../types/types';
-
 import { calculateLinearRegression } from './Calculations';
+
+// ADD: New interface for enhanced results
+export interface EnhancedTrendlineResult extends TrendlineResult {
+  supportTouches: number;
+  resistanceTouches: number;
+  trendStrength: number; // 0-100 score
+  slopeConsistency: boolean;
+}
+
 function checkTrendLine(
   support: boolean,
   pivot: number,
@@ -30,7 +38,6 @@ function optimizeSlope(
   let derivative = 0;
   let getDerivative = true;
 
-  // Simple optimization parameters
   const maxIters = y.length * 10;
   const maxNoImprove = y.length * 5;
   const minStep = 1e-4;
@@ -76,10 +83,56 @@ function optimizeSlope(
   return [bestSlope, bestIntercept];
 }
 
+// NEW: Count how many times price touches the trendline
+function countTrendlineTouches(
+  trendline: number[],
+  prices: number[],
+  tolerance: number = 0.5 // 0.5% tolerance for "touch"
+): number {
+  let touches = 0;
+
+  for (let i = 0; i < prices.length; i++) {
+    const trendValue = trendline[i];
+    const priceValue = prices[i];
+    const percentDiff = Math.abs((priceValue - trendValue) / trendValue) * 100;
+
+    if (percentDiff <= tolerance) {
+      touches++;
+    }
+  }
+
+  return touches;
+}
+
+// NEW: Calculate trend strength based on multiple factors
+function calculateTrendStrength(
+  slope: number,
+  touches: number,
+  totalPoints: number,
+  priceRange: number
+): number {
+  // Normalize slope to price range
+  const normalizedSlope = (Math.abs(slope) / priceRange) * 100;
+
+  // Touch ratio (more touches = stronger trend)
+  const touchRatio = touches / totalPoints;
+
+  // Slope strength (steeper = stronger, but cap at 5% per bar)
+  const slopeStrength = Math.min(normalizedSlope / 5, 1);
+
+  // Combined score (0-100)
+  const strength = (touchRatio * 0.6 + slopeStrength * 0.4) * 100;
+
+  return Math.round(strength);
+}
+
+// ENHANCED main function
 export function fitTrendlinesWindow(
   y: number[],
-  tolerance: number = 0.001
-): TrendlineResult {
+  tolerance: number = 0.001,
+  minTouches: number = 2,
+  minStrength: number = 30
+): EnhancedTrendlineResult {
   const N = y.length;
   const x = Array.from({ length: N }, (_, i) => i);
 
@@ -94,15 +147,85 @@ export function fitTrendlinesWindow(
   const supportLine = x.map((i) => supSlope * i + supInt);
   const resistLine = x.map((i) => resSlope * i + resInt);
 
+  // Count touches for validation
+  const supportTouches = countTrendlineTouches(supportLine, y, tolerance * 100);
+  const resistanceTouches = countTrendlineTouches(
+    resistLine,
+    y,
+    tolerance * 100
+  );
+
+  // Calculate price range for normalization
+  const priceRange = Math.max(...y) - Math.min(...y);
+
+  // Calculate trend strength
+  const avgTouches = (supportTouches + resistanceTouches) / 2;
+  const avgSlope = (Math.abs(supSlope) + Math.abs(resSlope)) / 2;
+  const trendStrength = calculateTrendStrength(
+    avgSlope,
+    avgTouches,
+    N,
+    priceRange
+  );
+
+  // Check slope consistency
+  const slopeConsistency = supSlope > 0 && resSlope > 0; // Both upward = bullish channel
+
   const last = y[N - 1];
   const tol = Math.abs(resistLine[N - 1]) * tolerance;
 
-  const breakout =
-    last >= resistLine[N - 1] - tol
-      ? 'bullish'
-      : last <= supportLine[N - 1] + tol
-      ? 'bearish'
-      : 'none';
+  // ENHANCED breakout detection with validation
+  let breakout: 'bullish' | 'bearish' | 'none' = 'none';
 
-  return { supportLine, resistLine, supSlope, resSlope, breakout };
+  if (last >= resistLine[N - 1] - tol) {
+    // Additional validation for bullish breakout
+    if (
+      resistanceTouches >= minTouches &&
+      trendStrength >= minStrength &&
+      resSlope > 0
+    ) {
+      // Resistance must be rising
+      breakout = 'bullish';
+      console.log(
+        `    → Bullish breakout validated: ${resistanceTouches} touches, ${trendStrength}% strength`
+      );
+    } else {
+      console.log(
+        `    → Bullish breakout REJECTED: touches=${resistanceTouches}, strength=${trendStrength}%, slope=${resSlope.toFixed(
+          4
+        )}`
+      );
+    }
+  } else if (last <= supportLine[N - 1] + tol) {
+    // Additional validation for bearish breakout
+    if (
+      supportTouches >= minTouches &&
+      trendStrength >= minStrength &&
+      supSlope < 0
+    ) {
+      // Support must be falling
+      breakout = 'bearish';
+      console.log(
+        `    → Bearish breakout validated: ${supportTouches} touches, ${trendStrength}% strength`
+      );
+    } else {
+      console.log(
+        `    → Bearish breakout REJECTED: touches=${supportTouches}, strength=${trendStrength}%, slope=${supSlope.toFixed(
+          4
+        )}`
+      );
+    }
+  }
+
+  return {
+    supportLine,
+    resistLine,
+    supSlope,
+    resSlope,
+    breakout,
+    supportTouches,
+    resistanceTouches,
+    trendStrength,
+    slopeConsistency,
+  };
 }
