@@ -1,0 +1,212 @@
+{
+  "testDate": "2025-08-11T20:05:55.279Z",
+  "configuration": {
+    "fixed": {
+      "startDate": "2025-01-01",
+      "endDate": "2025-01-31",
+      "barType": "time",
+      "barSize": 1,
+      "candleType": "traditional",
+      "contractSize": 1,
+      "maxDailyLoss": 1500,
+      "maxDailyProfit": 3000,
+      "breakevenTrigger": 3,
+      "trailDistance": 2
+    },
+    "testCombinations": [
+      {
+        "name": "Baseline",
+        "cvdLookBackBars": 5,
+        "stopLoss": 10,
+        "takeProfit": 20,
+        "emaMovingAverage": 0,
+        "adxThreshold": 0,
+        "startTime": "06:30",
+        "endTime": "13:00",
+        "useTrailingStop": false,
+        "tradeDirection": "both"
+      },
+      {
+        "name": "Conservative",
+        "cvdLookBackBars": 8,
+        "stopLoss": 8,
+        "takeProfit": 12,
+        "emaMovingAverage": 21,
+        "adxThreshold": 25,
+        "startTime": "06:30",
+        "endTime": "10:00",
+        "useTrailingStop": true,
+        "tradeDirection": "both"
+      },
+      {
+        "name": "Aggressive",
+        "cvdLookBackBars": 3,
+        "stopLoss": 12,
+        "takeProfit": 24,
+        "emaMovingAverage": 0,
+        "adxThreshold": 0,
+        "startTime": "06:30",
+        "endTime": "13:00",
+        "useTrailingStop": false,
+        "tradeDirection": "both"
+      },
+      {
+        "name": "LongOnly",
+        "cvdLookBackBars": 5,
+        "stopLoss": 10,
+        "takeProfit": 20,
+        "emaMovingAverage": 9,
+        "adxThreshold": 20,
+        "startTime": "06:30",
+        "endTime": "11:00",
+        "useTrailingStop": false,
+        "tradeDirection": "long"
+      },
+      {
+        "name": "ShortOnly",
+        "cvdLookBackBars": 5,
+        "stopLoss": 10,
+        "takeProfit": 15,
+        "emaMovingAverage": 0,
+        "adxThreshold": 30,
+        "startTime": "08:00",
+        "endTime": "13:00",
+        "useTrailingStop": true,
+        "tradeDirection": "short"
+      }
+    ]
+  },
+  "results": [
+    {
+      "name": "Baseline",
+      "params": {
+        "name": "Baseline",
+        "cvdLookBackBars": 5,
+        "stopLoss": 10,
+        "takeProfit": 20,
+        "emaMovingAverage": 0,
+        "adxThreshold": 0,
+        "startTime": "06:30",
+        "endTime": "13:00",
+        "useTrailingStop": false,
+        "tradeDirection": "both"
+      },
+      "success": true,
+      "results": {
+        "totalTrades": 98,
+        "winRate": 26.53,
+        "profitFactor": 0.6,
+        "totalPnL": -14182.5,
+        "sharpeRatio": -6.92,
+        "maxDrawdown": 15.88,
+        "executionTime": 3.12
+      }
+    },
+    {
+      "name": "Conservative",
+      "params": {
+        "name": "Conservative",
+        "cvdLookBackBars": 8,
+        "stopLoss": 8,
+        "takeProfit": 12,
+        "emaMovingAverage": 21,
+        "adxThreshold": 25,
+        "startTime": "06:30",
+        "endTime": "10:00",
+        "useTrailingStop": true,
+        "tradeDirection": "both"
+      },
+      "success": true,
+      "results": {
+        "totalTrades": 93,
+        "winRate": 39.78,
+        "profitFactor": 0.74,
+        "totalPnL": -2732.5,
+        "sharpeRatio": -3.25,
+        "maxDrawdown": 4.41,
+        "executionTime": 5.58
+      }
+    },
+    {
+      "name": "Aggressive",
+      "params": {
+        "name": "Aggressive",
+        "cvdLookBackBars": 3,
+        "stopLoss": 12,
+        "takeProfit": 24,
+        "emaMovingAverage": 0,
+        "adxThreshold": 0,
+        "startTime": "06:30",
+        "endTime": "13:00",
+        "useTrailingStop": false,
+        "tradeDirection": "both"
+      },
+      "success": true,
+      "results": {
+        "totalTrades": 86,
+        "winRate": 32.56,
+        "profitFactor": 0.78,
+        "totalPnL": -7402.5,
+        "sharpeRatio": -2.94,
+        "maxDrawdown": 12.08,
+        "executionTime": 3.1
+      }
+    },
+    {
+      "name": "LongOnly",
+      "params": {
+        "name": "LongOnly",
+        "cvdLookBackBars": 5,
+        "stopLoss": 10,
+        "takeProfit": 20,
+        "emaMovingAverage": 9,
+        "adxThreshold": 20,
+        "startTime": "06:30",
+        "endTime": "11:00",
+        "useTrailingStop": false,
+        "tradeDirection": "long"
+      },
+      "success": true,
+      "results": {
+        "totalTrades": 62,
+        "winRate": 33.87,
+        "profitFactor": 0.82,
+        "totalPnL": -3630,
+        "sharpeRatio": -2.04,
+        "maxDrawdown": 7.63,
+        "executionTime": 4.28
+      }
+    },
+    {
+      "name": "ShortOnly",
+      "params": {
+        "name": "ShortOnly",
+        "cvdLookBackBars": 5,
+        "stopLoss": 10,
+        "takeProfit": 15,
+        "emaMovingAverage": 0,
+        "adxThreshold": 30,
+        "startTime": "08:00",
+        "endTime": "13:00",
+        "useTrailingStop": true,
+        "tradeDirection": "short"
+      },
+      "success": true,
+      "results": {
+        "totalTrades": 56,
+        "winRate": 44.64,
+        "profitFactor": 0.61,
+        "totalPnL": -3352.5,
+        "sharpeRatio": -4.21,
+        "maxDrawdown": 5.39,
+        "executionTime": 5.74
+      }
+    }
+  ],
+  "summary": {
+    "totalTests": 5,
+    "successful": 5,
+    "failed": 0,
+    "totalExecutionTime": 21.838
+  }
+}

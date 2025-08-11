@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:mass": "tsx src/app/_lib/algo/testing/massBackTesting.ts"
+    "test:mass": "tsx src/app/_lib/algo/testgenetic.ts",
+    "test:Major": "tsx src/app/_lib/algo/bigGenetic.ts"
   },
   "dependencies": {
     "csv-parse": "^6.1.0",
